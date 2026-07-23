@@ -1,0 +1,22 @@
+{
+  "name": "@writeback/protocol",
+  "version": "0.1.0",
+  "description": "Wire protocol types for Writeback — the visual code editor bridge",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
