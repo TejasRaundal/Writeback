@@ -1,0 +1,22 @@
+{
+  "name": "@writeback/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Writeback — lets AI agents (Claude Code, Cursor, Codex) edit UI styling through the constrained Writeback bridge. Protocol-only: works against any bridge that speaks the Writeback wire protocol.",
+  "type": "module",
+  "bin": {
+    "writeback-mcp": "./dist/mcp.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@writeback/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.8.0"
+  }
+}
