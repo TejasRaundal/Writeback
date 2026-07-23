@@ -1,0 +1,36 @@
+{
+  "name": "@writeback/vite-plugin",
+  "version": "0.1.0",
+  "description": "Writeback — click elements in your running dev app, edit Tailwind visually or via AI agents, write back to real source. Vite plugin + bridge + MCP server.",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "files": ["dist", "panel"],
+  "scripts": {
+    "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('panel',{recursive:true});fs.copyFileSync('../panel/index.html','panel/index.html')\"",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "vite": ">=5"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.27.0",
+    "@writeback/protocol": "workspace:*",
+    "launch-editor": "^2.10.0",
+    "magic-string": "^0.30.17",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.1.0"
+  }
+}
