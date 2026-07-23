@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 40" width="168" height="40" fill="none" role="img" aria-label="Writeback">
+  <title>Writeback</title>
+  <!--
+    Horizontal lockup: return-caret mark + "Writeback" wordmark.
+    Ink + caret follow currentColor (adapts to light/dark). The return hook
+    holds the single iris accent. Set `color` on this element to recolor;
+    override the CSS var wb-accent to change or drop the accent
+    (currentColor = mono). Wordmark: Space Grotesk with a system fallback.
+  -->
+  <g transform="translate(4 6) scale(0.9)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--wb-accent, #5B5BD6)"/>
+    <path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="currentColor"/>
+  </g>
+  <text x="46" y="27.5"
+        font-family="'Space Grotesk','SF Pro Display','Segoe UI Variable',system-ui,-apple-system,sans-serif"
+        font-size="22" font-weight="600" letter-spacing="-0.5"
+        fill="currentColor">Writeback</text>
+</svg>

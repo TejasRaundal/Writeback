@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none" role="img" aria-label="Writeback">
+  <title>Writeback</title>
+  <!--
+    The return-caret: a left-pointing text caret (write cursor / code bracket)
+    whose shaft loops up and hooks back on itself — screen to source and back.
+    Monochrome by default (both strokes = currentColor).
+    Set the CSS var wb-accent for the one-accent, two-tone version
+    (return hook = iris).
+  -->
+  <g transform="translate(1 0)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Return hook: the write-back loop (accent) -->
+    <path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--wb-accent, currentColor)"/>
+    <!-- Caret: the write cursor (ink), sized to sit close to the hook without touching -->
+    <path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="var(--wb-ink, currentColor)"/>
+  </g>
+</svg>

@@ -1,0 +1,44 @@
+/* Writeback — brand tokens
+ * Concept: the "return-caret" — a write cursor that loops back on itself,
+ * drawing the round trip from screen to source and back.
+ *
+ * Usage:
+ *   Monochrome: set `color` on the SVG; both strokes follow currentColor.
+ *   Two-tone:   set --wb-accent (the return hook) to the iris accent.
+ */
+
+:root {
+  /* Core */
+  --wb-iris:        #5B5BD6; /* accent — the write-back action / return hook   */
+  --wb-iris-bright: #8486F5; /* accent on dark surfaces, hover, gradients      */
+  --wb-ink:         #17171F; /* wordmark + caret on light                      */
+  --wb-paper:       #FBFBFC; /* light surface                                  */
+  --wb-mist:        #6C6C7A; /* muted captions, secondary text                 */
+
+  /* Secondary (documented, use sparingly) */
+  --wb-amber:       #E5A23A; /* warning / constraint-violated state            */
+
+  /* Dark-surface ink */
+  --wb-paper-ink:   #F2F2F5; /* wordmark + caret on dark                       */
+
+  /* Mark defaults consumed by the SVGs */
+  --wb-accent:      var(--wb-iris);
+}
+
+/* Typography
+ * Wordmark / display: Space Grotesk (geometric, developer-grade).
+ * Fallback stack keeps the geometric feel where the face is unavailable.
+ */
+:root {
+  --wb-font-display: 'Space Grotesk', 'SF Pro Display', 'Segoe UI Variable',
+                     system-ui, -apple-system, sans-serif;
+  --wb-font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo,
+                     Consolas, monospace;
+}
+
+.wb-wordmark {
+  font-family: var(--wb-font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--wb-ink);
+}
