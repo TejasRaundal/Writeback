@@ -1,0 +1,81 @@
+import { useState } from 'react'
+import clsx from 'clsx'
+import { cva } from 'class-variance-authority'
+
+// cva element — refusal test target for M1 (editable in M5)
+const button = cva('rounded-md font-medium transition-colors', {
+  variants: {
+    intent: {
+      primary: 'bg-blue-600 text-white hover:bg-blue-500',
+      ghost: 'bg-transparent text-slate-300 hover:bg-slate-800',
+    },
+    size: {
+      sm: 'px-3 py-1.5 text-sm',
+      md: 'px-4 py-2 text-base',
+    },
+  },
+  defaultVariants: { intent: 'primary', size: 'md' },
+})
+
+function Nav() {
+  return (
+    <nav className="flex items-center justify-between px-8 py-4 border-b border-slate-800">
+      <span className="text-lg font-black text-white font-serif">Acme Dashboard</span>
+      <div className="flex gap-6">
+        <a className="text-slate-400 hover:text-white text-sm">Overview</a>
+        <a className="text-slate-400 hover:text-white text-sm">Reports</a>
+        <a className="text-white text-sm font-medium">Settings</a>
+      </div>
+    </nav>
+  )
+}
+
+function Card({ title, value, note }: { title: string; value: string; note: string }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+      <h3 className="text-sm text-pink-950 mb-2 bg-red-50">{title}</h3>
+      <p className="text-3xl font-bold text-red-600 bg-green-200 font-serif">{value}</p>
+      <p className="text-xs text-emerald-400 mt-3">{note}</p>
+    </div>
+  )
+}
+
+export default function App() {
+  const [active, setActive] = useState(false)
+  return (
+    <div className="min-h-screen bg-slate-950">
+      <Nav />
+      <main className="mx-auto max-w-5xl px-8 py-10">
+        <h1 className="text-2xl font-bold text-rose-500 mb-1 p-3.5 px-3.5 gap-6 bg-red-50">Overview</h1>
+        <p className="text-slate-400 mb-8">Last 30 days across all projects.</p>
+
+        <div className="grid grid-cols-3 gap-4 mb-10">
+          <Card title="Revenue" value="$48,210" note="+12% vs last month" />
+          <Card title="Active users" value="9,382" note="+4% vs last month" />
+          <Card title="Churn" value="1.9%" note="-0.3pt vs last month" />
+        </div>
+
+        <div className="flex items-center gap-3 mb-10">
+          <button className={button()}>New report</button>
+          <button className={button({ intent: 'ghost', size: 'sm' })}>Export</button>
+          {/* clsx element — refusal test target */}
+          <button
+            className={clsx('rounded-md px-4 py-2 text-sm', active ? 'bg-amber-500 text-black' : 'bg-slate-800 text-slate-300')}
+            onClick={() => setActive(!active)}
+          >
+            Toggle state
+          </button>
+        </div>
+
+        <section className="rounded-lg border border-slate-800 bg-slate-900 px-6 py-5">
+          <h2 className="text-lg font-semibold text-white mb-4">Recent activity</h2>
+          <ul className="flex flex-col gap-2">
+            <li className="text-sm text-slate-300 py-2 border-b border-slate-800">Deploy finished for web-app</li>
+            <li className="text-sm text-slate-300 py-2 border-b border-slate-800">New teammate joined: Sam</li>
+            <li className="text-sm text-slate-300 py-2">Invoice #1042 paid</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  )
+}

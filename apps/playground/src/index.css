@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/* Extra font families — the panel reads these from the theme (config.fonts),
+   so the font control offers more than the default sans/serif/mono. */
+@theme {
+  --font-display: "Georgia", "Times New Roman", serif;
+  --font-body: "Segoe UI", system-ui, sans-serif;
+  --font-condensed: "Arial Narrow", "Segoe UI", sans-serif;
+}
