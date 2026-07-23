@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.writeback/
+
+# runtime / generated (not source)
+.vce/
+test-results/
+playwright-report/
+packages/vite-plugin/panel/
+
+# redundant local design dupes — canonical is artifacts/brand.html
+assets/brand.html
+assets/brand-artifact.html
