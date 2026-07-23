@@ -1,0 +1,736 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Writeback</title>
+<style>
+  :root, :root[data-theme="light"] {
+    --bg: #fbfbfa; --panel: #ffffff; --inset: #f4f4f2; --line: #e9e8e4; --line2: #dddcd7;
+    --fg: #1a1c22; --dim: #6d7078; --faint: #a2a5ac;
+    --accent: #5b5bd6; --accent-soft: #ededfb; --accent-line: #d8d8f5;
+    --amber: #9a6700; --amber-bg: #fdf6e8; --amber-line: #f0dcae;
+    --green: #14855f; --green-bg: #e9f6ee; --red: #c8323b;
+    --chip: #f1f1ef; --chip-line: #e4e3df;
+    --shadow-1: 0 1px 2px rgba(24,26,32,.05);
+    --shadow-2: 0 2px 8px rgba(24,26,32,.10);
+  }
+  :root[data-theme="dark"] {
+    --bg: #131419; --panel: #191b21; --inset: #1f2129; --line: #262932; --line2: #30343f;
+    --fg: #e3e4e8; --dim: #90929b; --faint: #556174;
+    --accent: #797bec; --accent-soft: #232441; --accent-line: #38396b;
+    --amber: #e3b341; --amber-bg: #2a2214; --amber-line: #4d3d1b;
+    --green: #4ccb8f; --green-bg: #15291f; --red: #f2636b;
+    --chip: #22242d; --chip-line: #2d303b;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.3);
+    --shadow-2: 0 2px 8px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 13px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 6px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+  header {
+    flex: none; display: flex; align-items: center; gap: 7px; height: 42px;
+    padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .wordmark { display: flex; align-items: center; gap: 7px; margin-right: auto; }
+  .wordmark .wbmark { color: var(--fg); flex: none; }
+  .wordmark .mark { font-weight: 700; font-size: 13px; letter-spacing: .13em; }
+  .wordmark .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); transition: background .2s; }
+  .wordmark .dot.off { background: var(--red); }
+  body.disconnected #content, body.disconnected #actionbar, body.disconnected .tools { opacity: .45; pointer-events: none; }
+  .iconbtn {
+    height: 28px; min-width: 28px; display: inline-grid; place-items: center; padding: 0 8px;
+    background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+    color: var(--dim); font-size: 14px; line-height: 1; transition: background .12s, border-color .12s, color .12s;
+  }
+  .iconbtn:hover { background: var(--inset); border-color: var(--line); }
+  .iconbtn.on { color: var(--amber); border-color: var(--amber-line); background: var(--amber-bg); }
+  header a.iconbtn { text-decoration: none; font-size: 12px; }
+
+  #scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+  #scroll::-webkit-scrollbar { width: 10px; }
+  #scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 5px; border: 3px solid var(--bg); }
+
+  .hint-empty { padding: 42px 22px; text-align: center; color: var(--faint); font-size: 12.5px; }
+  .hint-empty .glyph { font-size: 24px; margin-bottom: 10px; }
+  .hint-empty p { margin: 0 0 18px; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; text-align: left; font-size: 11.5px; color: var(--dim); width: fit-content; margin: 0 auto; }
+  .keys kbd { font-family: inherit; font-size: 11px; color: var(--fg); background: var(--panel);
+    border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; margin-right: 2px; }
+
+  .selcard { border-bottom: 1px solid var(--line); background: var(--panel); }
+  .crumbwrap { padding: 11px 14px 7px; }
+  .components { font-weight: 600; font-size: 13.5px; letter-spacing: -.01em; }
+  .components .sep { color: var(--faint); font-weight: 400; margin: 0 4px; }
+  .components .plus { color: var(--accent); font-weight: 600; margin-left: 6px; font-size: 11.5px; }
+  .srcline a { color: var(--dim); cursor: pointer; font-size: 11.5px; text-decoration: none; }
+  .srcline a:hover { color: var(--accent); }
+  .tokens { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 14px 10px; }
+  .tk { font-family: ui-monospace, Consolas, monospace; font-size: 11px; padding: 2px 7px; border-radius: 5px;
+    background: var(--chip); border: 1px solid var(--chip-line); color: var(--dim); }
+  .tk.mine { color: var(--fg); border-color: var(--accent-line); background: var(--accent-soft); }
+  .tk.arb { color: var(--amber); border-color: var(--amber-line); background: var(--amber-bg); }
+  .tk.draft { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; cursor: pointer; }
+  .tk.draft::after { content: " ✕"; opacity: .55; font-size: 9px; }
+  .tk.draft:hover { background: var(--accent); color: #fff; }
+  .tokens .none { font-size: 11.5px; color: var(--faint); }
+
+  .banner { margin: 9px 14px 0; padding: 8px 11px; border-radius: 6px; font-size: 12px; line-height: 1.5;
+    background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--fg); }
+  .banner b { font-weight: 600; }
+  .banner.amber { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
+  .banner a { color: var(--accent); cursor: pointer; margin-right: 8px; text-decoration: none; }
+  .banner a:hover { text-decoration: underline; }
+
+  .refused { margin: 12px 14px; padding: 11px 12px; border-radius: 6px; background: var(--amber-bg); border: 1px solid var(--amber-line); }
+  .refused b { color: var(--amber); font-size: 12.5px; font-weight: 600; }
+  .refused .why { color: var(--dim); margin-top: 4px; font-size: 12px; }
+  .hints { margin-top: 9px; border-top: 1px dashed var(--amber-line); padding-top: 9px; }
+  .hints .lead { color: var(--dim); font-size: 12px; margin-bottom: 3px; }
+  .hints a { display: block; color: var(--accent); cursor: pointer; font-size: 11.5px; padding: 2px 0; text-decoration: none; }
+  .hints a:hover { text-decoration: underline; }
+
+  section { border-bottom: 1px solid var(--line); }
+  section h2 { display: flex; align-items: center; gap: 7px; margin: 0; padding: 10px 14px 7px; cursor: pointer; user-select: none;
+    font-size: 11px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+  section h2:hover { color: var(--dim); }
+  section h2 .chev { font-size: 8px; transition: transform .15s; }
+  section.closed .chev { transform: rotate(-90deg); }
+  section .body { padding: 0 14px 10px; }
+  section.closed .body { display: none; }
+  section.closed h2 { padding-bottom: 10px; }
+
+  .row { display: flex; align-items: center; gap: 9px; min-height: 32px; }
+  .row label { width: 68px; flex: none; color: var(--dim); font-size: 12px; }
+  .row.staged label { color: var(--accent); font-weight: 600; }
+
+  .stepper { display: flex; align-items: stretch; height: 28px; margin-left: auto;
+    border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); overflow: hidden; }
+  .stepper button { width: 28px; border: none; background: transparent; color: var(--dim); cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 0; border-radius: 0; transition: background .1s; }
+  .stepper button:hover { background: var(--inset); color: var(--fg); }
+  .stepper button:active { background: var(--accent-soft); color: var(--accent); }
+  .stepper .val { min-width: 58px; display: grid; place-items: center; font-size: 12.5px;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line); font-weight: 550; }
+  .stepper .val.unset { color: var(--faint); font-weight: 400; font-size: 11px; }
+  .stepper .val.staged { color: var(--accent); }
+  .dimval { color: var(--faint) !important; font-weight: 400 !important; }
+
+  /* per-property revert — appears only on a staged row */
+  .revert { flex: none; width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+    border: 1px solid var(--line2); border-radius: 6px; background: var(--panel); color: var(--dim);
+    cursor: pointer; font-size: 14px; line-height: 1; transition: color .12s, border-color .12s; }
+  .revert:hover { color: var(--accent); border-color: var(--accent); }
+
+  select { margin-left: auto; height: 28px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); font-size: 12px; cursor: pointer; }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 28px; margin: 0; }
+  .rangeval { min-width: 32px; text-align: right; color: var(--dim); font-size: 12px; }
+
+  .colorhead { display: flex; align-items: center; gap: 7px; min-height: 26px; font-size: 12px; color: var(--dim); }
+  .colorhead .chipdot { width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--line2); flex: none; }
+  .colorhead .name { font-weight: 550; color: var(--fg); font-size: 11.5px; }
+  .colorhead .name.staged { color: var(--accent); }
+  .pill { margin-left: auto; height: 22px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--line2);
+    background: transparent; color: var(--dim); font-size: 11px; cursor: pointer; transition: all .12s; }
+  .pill.on { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .contrast { font-size: 11.5px; color: var(--dim); margin: 3px 0; }
+  .contrast b.pass { color: var(--green); } .contrast b.fail { color: var(--red); }
+  .swatches { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; margin: 6px 0 4px; max-height: 112px; overflow-y: auto; padding: 2px; }
+  .sw { aspect-ratio: 1; border-radius: 4px; border: 1px solid rgba(127,127,127,.22); cursor: pointer; padding: 0; transition: transform .08s; }
+  .sw:hover { transform: scale(1.25); border-color: var(--fg); position: relative; z-index: 1; }
+  .sw:focus-visible { transform: scale(1.25); position: relative; z-index: 1; }
+  .sw.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .sw.fail { opacity: .14; pointer-events: none; }
+  .colorblock + .colorblock { border-top: 1px solid var(--line); margin-top: 9px; padding-top: 8px; }
+  .customrow { display: flex; gap: 6px; margin-top: 5px; }
+  .custom { flex: 1; height: 28px; padding: 0 9px; border: 1px dashed var(--amber-line); background: transparent;
+    color: var(--amber); border-radius: 6px; font-size: 11.5px; }
+  .custom::placeholder { color: var(--amber); opacity: .55; }
+  .custom:focus { border-style: solid; outline: none; }
+  .custom.bad { border-color: var(--red); color: var(--red); }
+  .custom-apply { height: 28px; padding: 0 10px; border: 1px solid var(--amber-line); background: transparent;
+    color: var(--amber); border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .custom-apply:hover { background: var(--amber-bg); }
+
+  #actionbar { flex: none; display: none; align-items: center; gap: 9px; padding: 10px 14px;
+    background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -2px 8px rgba(0,0,0,.04); }
+  #actionbar .count { margin-right: auto; color: var(--accent); font-weight: 600; font-size: 12px; }
+  .btn { height: 30px; padding: 0 15px; border-radius: 7px; border: 1px solid var(--line2);
+    background: var(--panel); cursor: pointer; font-size: 12.5px; font-weight: 550; box-shadow: var(--shadow-1);
+    transition: background .12s, border-color .12s; }
+  .btn:hover { background: var(--inset); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .4; cursor: default; box-shadow: none; }
+
+  pre.diff { margin: 9px 14px; background: var(--inset); border: 1px solid var(--line); border-radius: 6px;
+    padding: 9px 11px; overflow-x: auto; color: var(--faint); max-height: 130px; font-size: 11px; line-height: 1.55; }
+  pre.diff .add { color: var(--green); } pre.diff .del { color: var(--red); }
+
+  footer { flex: none; border-top: 1px solid var(--line); background: var(--panel); padding: 7px 12px 9px; max-height: 26vh; overflow-y: auto; }
+  .tools { display: flex; gap: 5px; margin-bottom: 7px; }
+  .histhead { font-size: 9.5px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 1px 0 4px; }
+  .journal .e { display: flex; align-items: center; gap: 7px; min-height: 22px; font-size: 10px; color: var(--dim); border-radius: 4px; padding: 0 4px; margin: 0 -4px; }
+  .journal .e:hover { background: var(--inset); }
+  .journal .e .file { color: var(--fg); font-weight: 550; flex: none; }
+  .journal .e .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .journal .e button { flex: none; height: 17px; padding: 0 6px; font-size: 9px; border-radius: 4px;
+    border: 1px solid var(--line2); background: var(--panel); color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .1s; }
+  .journal .e:hover button, .journal .e button:focus-visible { opacity: 1; }
+  .journal .e button:hover { color: var(--red); border-color: var(--red); }
+  .journal .none { color: var(--faint); font-size: 10px; }
+
+  .toast { position: fixed; left: 12px; right: 12px; bottom: 10px; z-index: 10;
+    background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber);
+    border-radius: 5px; padding: 6px 10px; font-size: 10.5px; box-shadow: var(--shadow-2); animation: rise .18s ease-out; }
+  .toast.ok { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  @keyframes rise { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="wordmark"><svg class="wbmark" viewBox="0 0 32 32" width="15" height="15" fill="none" aria-hidden="true"><g transform="translate(1 0)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--accent)"/><path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="currentColor"/></g></svg><span class="mark">WRITEBACK</span><span class="dot" id="status" title="Connected"></span></span>
+  <button class="iconbtn" id="driftToggle" title="Drift radar — outline off-scale values" aria-label="Toggle drift radar">◇</button>
+  <a class="iconbtn" href="/export" target="_blank" title="Session changelog" aria-label="Export session changelog">export</a>
+  <button class="iconbtn" id="themeToggle" title="Switch theme" aria-label="Switch to dark theme">🌙</button>
+</header>
+
+<div id="scroll">
+  <div id="crumb">
+    <div class="hint-empty">
+      <div class="glyph">⌖</div>
+      <p>Click any element on the page<br />to inspect and edit it.</p>
+      <div class="keys">
+        <span><kbd>↑</kbd><kbd>↓</kbd></span><span>step padding</span>
+        <span><kbd>Alt</kbd>+arrows</span><span>step margin</span>
+        <span><kbd>Shift</kbd>+arrows</span><span>step gap</span>
+        <span><kbd>d</kbd></span><span>drift radar</span>
+        <span><kbd>Esc</kbd></span><span>deselect</span>
+      </div>
+    </div>
+  </div>
+  <div id="content"></div>
+  <pre class="diff mono" id="diff" hidden></pre>
+</div>
+
+<div id="actionbar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="reset">Reset</button>
+  <button class="btn primary" id="save">Save</button>
+</div>
+
+<footer>
+  <div class="tools" id="tools" hidden>
+    <button class="btn" id="copy">Copy styles</button><button class="btn" id="paste" disabled>Paste</button>
+  </div>
+  <div class="journal" id="journal"></div>
+</footer>
+
+<script>
+function $(id) { return document.getElementById(id) }
+const EMPTY_STATE = $('crumb').innerHTML
+
+// ── theme ──
+function applyThemeButton(theme) {
+  $('themeToggle').textContent = theme === 'light' ? '🌙' : '☀️'
+  $('themeToggle').setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme')
+}
+const savedTheme = localStorage.getItem('wb-theme') || 'light'
+document.documentElement.dataset.theme = savedTheme
+applyThemeButton(savedTheme)
+$('themeToggle').onclick = () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
+  document.documentElement.dataset.theme = next
+  localStorage.setItem('wb-theme', next)
+  applyThemeButton(next)
+}
+$('driftToggle').onclick = () => parent.postMessage({ t: 'wb-drift-toggle' }, '*')
+
+// ── token scales (standard Tailwind sets; spacing/colors come from the project config) ──
+const SIZES = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl']
+const WEIGHTS = ['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black']
+// font families come from the project's theme (config.fonts) at render time, not this list
+const TRACKING = ['tighter', 'tight', 'normal', 'wide', 'wider', 'widest']
+const LEADING = ['none', 'tight', 'snug', 'normal', 'relaxed', 'loose']
+const ROUNDED = ['none', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', '3xl', 'full']
+const SHADOWS = ['none', '2xs', 'xs', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', 'inner']
+const MANAGED = ['p', 'px', 'py', 'm', 'gap', 'bg', 'text', 'text-size', 'font-weight', 'font-family', 'tracking', 'leading', 'rounded', 'shadow', 'opacity']
+
+// CSS approximations for live preview (the real value is written as a class on Save)
+const SIZE_CSS = { xs: '.75rem', sm: '.875rem', base: '1rem', lg: '1.125rem', xl: '1.25rem', '2xl': '1.5rem', '3xl': '1.875rem', '4xl': '2.25rem', '5xl': '3rem', '6xl': '3.75rem', '7xl': '4.5rem', '8xl': '6rem', '9xl': '8rem' }
+const WEIGHT_CSS = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 }
+const TRACK_CSS = { tighter: '-.05em', tight: '-.025em', normal: '0', wide: '.025em', wider: '.05em', widest: '.1em' }
+const LEAD_CSS = { none: '1', tight: '1.25', snug: '1.375', normal: '1.5', relaxed: '1.625', loose: '2' }
+const ROUND_CSS = { none: '0', sm: '.125rem', DEFAULT: '.25rem', md: '.375rem', lg: '.5rem', xl: '.75rem', '2xl': '1rem', '3xl': '1.5rem', full: '9999px' }
+const SHADOW_CSS = { none: 'none', '2xs': '0 1px 1px rgba(0,0,0,.05)', xs: '0 1px 2px rgba(0,0,0,.05)', sm: '0 1px 3px rgba(0,0,0,.1)', DEFAULT: '0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06)', md: '0 4px 6px rgba(0,0,0,.1)', lg: '0 10px 15px rgba(0,0,0,.1)', xl: '0 20px 25px rgba(0,0,0,.1)', '2xl': '0 25px 50px rgba(0,0,0,.25)', inner: 'inset 0 2px 4px rgba(0,0,0,.06)' }
+
+const spacingCss = (v) => v == null ? null : v.startsWith('[') ? v.slice(1, -1) : v === 'px' ? '1px' : parseFloat(v) * 0.25 + 'rem'
+const colorCss = (v) => config.colors[v] || (v && v.startsWith('[') ? v.slice(1, -1) : v)
+
+function cssFor(group, v) {
+  switch (group) {
+    case 'p': return { padding: spacingCss(v) }
+    case 'px': return { paddingLeft: spacingCss(v), paddingRight: spacingCss(v) }
+    case 'py': return { paddingTop: spacingCss(v), paddingBottom: spacingCss(v) }
+    case 'm': return { margin: spacingCss(v) }
+    case 'gap': return { gap: spacingCss(v) }
+    case 'text-size': return { fontSize: SIZE_CSS[v] || null }
+    case 'font-weight': return { fontWeight: String(WEIGHT_CSS[v] || '') }
+    case 'font-family': return { fontFamily: (config.fonts && config.fonts[v]) || null }
+    case 'tracking': return { letterSpacing: TRACK_CSS[v] ?? null }
+    case 'leading': return { lineHeight: LEAD_CSS[v] ?? null }
+    case 'rounded': return { borderRadius: ROUND_CSS[v] ?? null }
+    case 'shadow': return { boxShadow: SHADOW_CSS[v] ?? null }
+    case 'opacity': return { opacity: v != null ? String(Number(v) / 100) : null }
+    case 'bg': return { backgroundColor: colorCss(v) }
+    case 'text': return { color: colorCss(v) }
+  }
+  return {}
+}
+
+// ── connection ──
+let ws = null, retry = null
+let config = { spacing: [], colors: {} }
+let sel = null, multi = []
+let draft = {}          // group -> staged value, not yet written to source
+let clipboard = null
+const send = (m) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)) }
+const previewStyle = (style) => parent.postMessage({ t: 'wb-preview', style }, '*')
+const previewClear = () => parent.postMessage({ t: 'wb-preview-clear' }, '*')
+
+function connect() {
+  ws = new WebSocket('ws://127.0.0.1:7331')
+  ws.onopen = () => {
+    document.body.classList.remove('disconnected')
+    $('status').classList.remove('off'); $('status').title = 'Connected'
+    busy = false; editQueue.length = 0
+    send({ t: 'config' }); send({ t: 'journal' })
+  }
+  ws.onmessage = onMessage
+  ws.onclose = () => {
+    document.body.classList.add('disconnected')
+    $('status').classList.add('off'); $('status').title = 'Disconnected — is the dev server running?'
+    if (!retry) retry = setTimeout(() => { retry = null; connect() }, 1500)
+  }
+  ws.onerror = () => ws.close()
+}
+
+const sameLoc = (a, b) => a && b && a.file === b.file && a.line === b.line && a.col === b.col
+const clamp = (i, list) => Math.min(list.length - 1, Math.max(0, i))
+
+window.addEventListener('message', (e) => {
+  const d = e.data
+  if (d?.t === 'wb-select') {
+    if (d.add && sel) { multi.push({ loc: d.loc, hash: null, classes: null }); send({ t: 'resolve', loc: d.loc }) }
+    else { sel = { loc: d.loc, components: d.components || [], computed: d.computed || {} }; multi = []; draft = {}; send({ t: 'resolve', loc: sel.loc }) }
+  }
+  if (d?.t === 'wb-nudge' && sel?.classes) {
+    const cur = valueOf(d.group)
+    const i = config.spacing.indexOf(cur)
+    const next = config.spacing[clamp((i < 0 ? config.spacing.indexOf('4') : i) + d.dir, config.spacing)]
+    if (next !== undefined) stage(d.group, next)
+  }
+  if (d?.t === 'wb-deselect') { sel = null; multi = []; draft = {}; previewClear(); showEmpty() }
+  if (d?.t === 'wb-drift-state') $('driftToggle').classList.toggle('on', !!d.on)
+})
+
+function onMessage(e) {
+  const m = JSON.parse(e.data)
+  if (m.t === 'config') config = m
+  if (m.t === 'resolved') {
+    const extra = multi.find((x) => sameLoc(x.loc, m.loc))
+    if (extra) { extra.hash = m.hash; extra.classes = m.classes; render(); afterResolve(); return }
+    if (!sel || !sameLoc(sel.loc, m.loc)) return
+    Object.assign(sel, { hash: m.hash, classes: m.classes, blast: m.blast, hints: m.hints, dirty: m.dirty, instance: m.instance, reason: m.reason })
+    render(); afterResolve()
+  }
+  if (m.t === 'edited' && !m.dry) {
+    if (m.diff) collectedDiff.push(m.diff)
+    if (m.warn) toast(m.warn)
+    send({ t: 'journal' })
+    pendingResolves = reresolveLocs.length || 1
+    ;(reresolveLocs.length ? reresolveLocs : [sel?.loc]).filter(Boolean).forEach((l) => send({ t: 'resolve', loc: l }))
+    reresolveLocs = []
+  }
+  if (m.t === 'refused') {
+    toast('Edit refused: ' + m.reason.replace(/-/g, ' '))
+    editQueue.length = 0; reresolveLocs = []; saving = false
+    if (sel) { busy = true; pendingResolves = 1; send({ t: 'resolve', loc: sel.loc }) } else busy = false
+  }
+  if (m.t === 'journal') renderJournal(m.entries)
+}
+
+function afterResolve() {
+  if (busy && pendingResolves > 0 && --pendingResolves === 0) {
+    busy = false
+    if (saving && !editQueue.length) finishSave()
+    else pump()
+  }
+}
+
+// ── staging ──
+// Controls never touch source directly — they stage a value and preview it live.
+// Save writes the whole draft; Reset discards it and restores the original render.
+function stage(group, value) {
+  if (!sel || sel.classes === null) return
+  draft[group] = value
+  applyPreview()
+  const st = $('scroll').scrollTop
+  render()
+  $('scroll').scrollTop = st
+}
+
+function draftStyle() {
+  const style = {}
+  for (const [g, v] of Object.entries(draft)) {
+    for (const [k, val] of Object.entries(cssFor(g, v))) if (val != null) style[k] = val
+  }
+  return style
+}
+function applyPreview() {
+  const s = draftStyle()
+  if (Object.keys(s).length) previewStyle(s)
+  else previewClear()
+  updateActionBar()
+}
+
+function updateActionBar() {
+  const n = Object.keys(draft).length
+  $('actionbar').style.display = n ? 'flex' : 'none'
+  $('count').textContent = n ? `${n} unsaved change${n > 1 ? 's' : ''}` : ''
+}
+
+function rerender() { const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st }
+// un-stage a single property, keeping the rest of the draft
+function unstage(group) { delete draft[group]; applyPreview(); rerender() }
+$('reset').onclick = () => { draft = {}; previewClear(); rerender(); updateActionBar() }
+$('save').onclick = () => {
+  if (!Object.keys(draft).length || busy) return
+  collectedDiff = []
+  saving = true
+  for (const [group, value] of Object.entries(draft)) editQueue.push({ group, value })
+  pump()
+}
+
+function finishSave() {
+  saving = false
+  draft = {}
+  previewClear()
+  updateActionBar()
+  if (collectedDiff.length) showDiff(collectedDiff.join('\n'))
+  toast('Saved ' + (sel ? sel.loc.file.split('/').pop() : ''), true)
+}
+
+// ── serialized write queue (fixes stale-hash refusals on multi-op saves) ──
+const editQueue = []
+let busy = false, pendingResolves = 0, reresolveLocs = [], saving = false, collectedDiff = []
+
+function pump() {
+  if (busy || !sel || !editQueue.length) return
+  const { group, value } = editQueue.shift()
+  // bracketed custom values are the explicit off-scale escape hatch → raw
+  const op = { kind: 'tw', group, variants: [], value, raw: value.startsWith('[') }
+  if (multi.length && multi.every((x) => x.hash)) {
+    busy = true; reresolveLocs = [sel.loc, ...multi.map((x) => x.loc)]
+    send({ t: 'bulk', id: crypto.randomUUID(), edits: [sel, ...multi].map((s) => ({ loc: s.loc, hash: s.hash ?? sel.hash, op })) })
+    return
+  }
+  busy = true; reresolveLocs = [sel.loc]
+  send({ t: 'edit', id: crypto.randomUUID(), loc: sel.loc, hash: sel.hash, op })
+}
+
+$('copy').onclick = () => {
+  if (!sel?.classes) return
+  clipboard = sel.classes.filter((c) => MANAGED.some((g) => matchGroup(c, g) !== null))
+  $('paste').disabled = !clipboard?.length
+}
+$('paste').onclick = () => {
+  if (!clipboard) return
+  for (const tok of clipboard) for (const g of MANAGED) { const v = matchGroup(tok, g); if (v !== null) { draft[g] = v; break } }
+  applyPreview(); const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st
+}
+
+function matchGroup(cls, group) {
+  if (cls.includes(':')) return null
+  const neg = cls.startsWith('-')
+  const base = neg ? cls.slice(1) : cls
+  switch (group) {
+    case 'text-size': { const m = base.match(/^text-(.+)$/); return m && SIZES.includes(m[1]) ? m[1] : null }
+    case 'font-weight': { const m = base.match(/^font-(.+)$/); return m && WEIGHTS.includes(m[1]) ? m[1] : null }
+    case 'font-family': { const m = base.match(/^font-(.+)$/); return m && config.fonts && (m[1] in config.fonts) ? m[1] : null }
+    case 'tracking': { const m = base.match(/^tracking-(.+)$/); return m ? m[1] : null }
+    case 'leading': { const m = base.match(/^leading-(.+)$/); return m ? m[1] : null }
+    case 'opacity': { const m = base.match(/^opacity-(.+)$/); return m ? m[1] : null }
+    case 'rounded': { if (base === 'rounded') return 'DEFAULT'; const m = base.match(/^rounded-(.+)$/); return m && ROUNDED.includes(m[1]) ? m[1] : null }
+    case 'shadow': { if (base === 'shadow') return 'DEFAULT'; const m = base.match(/^shadow-(.+)$/); return m && SHADOWS.includes(m[1]) ? m[1] : null }
+  }
+  if (!base.startsWith(group + '-')) return null
+  const rest = base.slice(group.length + 1)
+  if (group === 'p' || group === 'm') { if (/^[trblxy]-/.test(rest)) return null }
+  if (group === 'gap' && /^[xy]-/.test(rest)) return null
+  if (group === 'text' && (SIZES.includes(rest) || rest.startsWith('[') || /^(left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip|opacity-)/.test(rest))) return null
+  if (group === 'bg' && /^(gradient-|linear-|radial-|conic-|cover$|contain$|auto$|center|top|bottom|left|right|repeat|no-repeat|fixed$|local$|scroll$|clip-|origin-|blend-|opacity-|none$)/.test(rest)) return null
+  return neg ? '-' + rest : rest
+}
+
+// source value for a group (ignoring draft) — used to detect multi-select disagreement
+function sourceValueIn(classes, group) {
+  if (!classes) return null
+  for (const c of classes) { const v = matchGroup(c, group); if (v !== null) return v }
+  return null
+}
+// displayed value: draft wins, then this element's source, else null
+function valueOf(group) {
+  if (group in draft) return draft[group]
+  return sourceValueIn(sel.classes, group)
+}
+const isStaged = (group) => group in draft
+// true when a multi-selection's elements disagree on this group's source value
+function isMixed(group) {
+  if (!multi.length || group in draft) return false
+  const base = sourceValueIn(sel.classes, group)
+  return multi.some((x) => x.classes && sourceValueIn(x.classes, group) !== base)
+}
+
+function computedOf(group) { const v = sel.computed?.[group]; return v ? v.replace(/^0px$/, '0') : null }
+
+function renderJournal(entries) {
+  const j = $('journal')
+  j.innerHTML = '<div class="histhead">History</div>'
+  if (!entries.length) { j.innerHTML += '<div class="none">Saved edits appear here, each with undo.</div>'; return }
+  for (const en of entries.slice(-8).reverse()) {
+    const row = el('div', 'e')
+    row.append(el('span', 'file', en.file.split('/').pop()), el('span', 'what mono', en.summary.replace(/^\+\s*/, '').slice(0, 46)))
+    const b = el('button', null, 'undo'); b.onclick = () => send({ t: 'undo', id: en.id })
+    row.appendChild(b); j.appendChild(row)
+  }
+}
+
+function showDiff(diff) {
+  const e = $('diff'); e.hidden = false
+  e.innerHTML = diff.split('\n').map((l) => '<span class="' + (l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : '') + '">' + l.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>').join('\n')
+}
+function toast(text, ok) {
+  document.querySelector('.toast')?.remove()
+  const d = el('div', 'toast' + (ok ? ' ok' : ''), (ok ? '✓ ' : '') + text)
+  document.body.appendChild(d)
+  setTimeout(() => d.remove(), ok ? 1600 : 5000)
+}
+
+const probe = document.createElement('div'); document.body.appendChild(probe)
+function rgbOf(css) { probe.style.color = ''; probe.style.color = css; if (!probe.style.color) return null; const m = getComputedStyle(probe).color.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number) : null }
+function luminance([r, g, b]) { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
+function contrast(c1, c2) { const a = rgbOf(c1), b = rgbOf(c2); if (!a || !b) return null; const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (l1 + 0.05) / (l2 + 0.05) }
+
+function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n }
+// small revert control shown on a staged row — resets just that one property
+function revertBtn(group) { const b = el('button', 'revert', '↺'); b.title = 'Reset this change'; b.onclick = (e) => { e.stopPropagation(); unstage(group) }; return b }
+
+function stepperOver(group, label, list, opts = {}) {
+  const cur = valueOf(group), staged = isStaged(group), mixed = isMixed(group)
+  const row = el('div', 'row' + (staged ? ' staged' : ''))
+  row.appendChild(el('label', null, label))
+  const box = el('div', 'stepper')
+  const step = (delta) => {
+    const i = list.indexOf(valueOf(group))
+    const next = list[clamp((i < 0 ? (opts.startAt ?? Math.floor(list.length / 2)) : i) + delta, list)]
+    if (next !== undefined) stage(group, next)
+  }
+  const mk = (txt, delta) => {
+    const b = el('button', null, txt); b.title = (delta > 0 ? 'Increase ' : 'Decrease ') + label; b.onclick = () => step(delta)
+    if (opts.previewCss) {
+      b.onmouseenter = () => { const i = list.indexOf(valueOf(group)); const nx = list[clamp((i < 0 ? (opts.startAt ?? 0) : i) + delta, list)]; const c = opts.previewCss(nx); if (c) previewStyle({ ...draftStyle(), ...c }) }
+      b.onmouseleave = () => applyPreview()
+    }
+    return b
+  }
+  const shown = mixed ? 'mixed' : cur === 'DEFAULT' ? 'base' : (cur ?? computedOf(group) ?? '—')
+  const v = el('span', 'val mono num' + (cur === null && !mixed ? ' unset' : '') + (staged ? ' staged' : ''), shown)
+  if (cur === null && !mixed) v.title = 'Current computed value — no class sets this yet'
+  box.append(mk('−', -1), v, mk('+', 1)); row.appendChild(box)
+  if (staged) row.appendChild(revertBtn(group))
+  return row
+}
+
+function selectOver(group, label, list) {
+  const cur = valueOf(group), staged = isStaged(group)
+  const row = el('div', 'row' + (staged ? ' staged' : ''))
+  row.appendChild(el('label', null, label))
+  const s = document.createElement('select')
+  const none = el('option', null, cur === null ? (computedOf(group) ?? 'not set') + ' (computed)' : '(inherited)'); none.value = ''
+  s.appendChild(none)
+  for (const v of list) { const o = el('option', null, v); o.value = v; if (v === cur) o.selected = true; s.appendChild(o) }
+  s.onchange = () => { if (s.value) stage(group, s.value) }
+  row.appendChild(s)
+  if (staged) row.appendChild(revertBtn(group))
+  return row
+}
+
+function sliderOver(group, label, max, step) {
+  const cur = valueOf(group), staged = isStaged(group)
+  const row = el('div', 'row' + (staged ? ' staged' : ''))
+  row.appendChild(el('label', null, label))
+  const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = max; r.step = step; r.value = cur ?? computedOf(group) ?? max
+  const v = el('span', 'rangeval mono num' + (cur === null ? ' dimval' : ''), cur ?? computedOf(group) ?? '—')
+  r.oninput = () => { v.textContent = r.value; previewStyle({ ...draftStyle(), opacity: String(Number(r.value) / 100) }) }
+  r.onchange = () => stage(group, r.value)
+  row.append(r, v)
+  if (staged) row.appendChild(revertBtn(group))
+  return row
+}
+
+// roving-tabindex color grid: one tab stop, arrows move focus
+function colorBlock(group, title) {
+  const wrap = el('div', 'colorblock')
+  const other = group === 'bg' ? 'text' : 'bg'
+  const pairName = valueOf(other), pairCss = pairName ? config.colors[pairName] : null
+  const curName = valueOf(group), staged = isStaged(group)
+
+  const head = el('div', 'colorhead')
+  if (curName && config.colors[curName]) {
+    const dot = el('span', 'chipdot'); dot.style.background = config.colors[curName]
+    head.append(dot, el('span', null, title + ' '), el('span', 'name mono' + (staged ? ' staged' : ''), curName))
+  } else if (curName) { head.append(el('span', null, title + ' '), el('span', 'name' + (staged ? ' staged' : ''), curName + ' (custom)')) }
+  else { const comp = computedOf(group); const dot = el('span', 'chipdot'); if (comp) dot.style.background = comp; head.append(dot, el('span', null, title + ' '), el('span', 'name dimval', comp ? 'computed' : 'not set')); if (comp) head.querySelector('.name').title = comp }
+  let aaOnly = false
+  if (pairCss) { const cb = el('button', 'pill', 'AA only'); cb.style.marginLeft = 'auto'; cb.title = 'Hide colors failing WCAG AA'; cb.onclick = () => { aaOnly = !aaOnly; cb.classList.toggle('on', aaOnly); paint() }; head.appendChild(cb) }
+  if (staged) { const rb = revertBtn(group); if (!pairCss) rb.style.marginLeft = 'auto'; head.appendChild(rb) }
+  wrap.appendChild(head)
+
+  if (pairCss && curName && config.colors[curName]) { const r = contrast(config.colors[curName], pairCss); if (r) { const c = el('div', 'contrast'); c.innerHTML = `contrast <b class="${r >= 4.5 ? 'pass' : 'fail'}">${r.toFixed(2)}</b> ${r >= 4.5 ? '· passes AA' : r >= 3 ? '· large text only' : '· fails AA'}`; wrap.appendChild(c) } }
+
+  const grid = el('div', 'swatches'); grid.setAttribute('role', 'listbox'); grid.setAttribute('aria-label', title + ' color')
+  const names = Object.keys(config.colors)
+  const paint = () => {
+    grid.innerHTML = ''
+    names.forEach((name, idx) => {
+      const css = config.colors[name]
+      const s = el('button', 'sw'); const r = pairCss ? contrast(css, pairCss) : null; const fails = aaOnly && r !== null && r < 4.5
+      s.className = 'sw' + (name === curName ? ' sel' : '') + (fails ? ' fail' : '')
+      s.style.background = css; s.title = name + (r ? ` · ${r.toFixed(2)}` : ''); s.setAttribute('aria-label', name)
+      s.tabIndex = idx === 0 ? 0 : -1
+      s.onmouseenter = () => previewStyle({ ...draftStyle(), ...cssFor(group, name) })
+      s.onmouseleave = () => applyPreview()
+      s.onclick = () => stage(group, name)
+      s.onkeydown = (e) => {
+        const per = 14, cells = [...grid.children]; let ni = -1
+        if (e.key === 'ArrowRight') ni = idx + 1; else if (e.key === 'ArrowLeft') ni = idx - 1
+        else if (e.key === 'ArrowDown') ni = idx + per; else if (e.key === 'ArrowUp') ni = idx - per
+        else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stage(group, name); return }
+        else return
+        e.preventDefault(); const t = cells[ni]; if (t) { s.tabIndex = -1; t.tabIndex = 0; t.focus() }
+      }
+      grid.appendChild(s)
+    })
+  }
+  paint(); wrap.appendChild(grid)
+
+  const cr = el('div', 'customrow')
+  const inp = el('input', 'custom mono'); inp.placeholder = 'custom, e.g. [#ff6600]'
+  const apply = el('button', 'custom-apply', '↵'); apply.title = 'Apply custom value'
+  const commit = () => {
+    const val = inp.value.trim()
+    if (!/^\[[^\]]+\]$/.test(val) && !/^\[?#?[0-9a-fA-F]{3,8}\]?$/.test(val)) { inp.classList.add('bad'); return }
+    inp.classList.remove('bad'); stage(group, val.startsWith('[') ? val : `[${val}]`)
+  }
+  inp.oninput = () => inp.classList.remove('bad')
+  inp.onkeydown = (e) => { if (e.key === 'Enter') commit() }
+  apply.onclick = commit
+  cr.append(inp, apply); wrap.appendChild(cr)
+  return wrap
+}
+
+const openSections = JSON.parse(localStorage.getItem('wb-sections') || '{"Spacing":true,"Typography":true,"Colors":true,"Appearance":false}')
+function makeSection(title, children) {
+  const s = el('section'); if (!openSections[title]) s.classList.add('closed')
+  const h = el('h2'); h.append(el('span', 'chev', '▾'), el('span', null, title))
+  h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0'); h.setAttribute('aria-expanded', String(!!openSections[title]))
+  const toggle = () => { s.classList.toggle('closed'); openSections[title] = !s.classList.contains('closed'); h.setAttribute('aria-expanded', String(openSections[title])); localStorage.setItem('wb-sections', JSON.stringify(openSections)) }
+  h.onclick = toggle; h.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
+  const body = el('div', 'body'); children.forEach((c) => body.appendChild(c)); s.append(h, body)
+  return s
+}
+
+function jumpLink(hint) { const a = el('a', 'mono', `${hint.loc.file}:${hint.loc.line}`); a.onclick = () => { sel = { loc: hint.loc, components: [hint.component], computed: {} }; draft = {}; send({ t: 'resolve', loc: hint.loc }) }; return a }
+
+function showEmpty() { $('crumb').innerHTML = EMPTY_STATE; $('content').innerHTML = ''; $('tools').hidden = true; $('diff').hidden = true; updateActionBar() }
+
+function render() {
+  const crumb = $('crumb'); crumb.innerHTML = ''
+  const c = $('content'); c.innerHTML = ''
+  $('tools').hidden = false
+
+  const card = el('div', 'selcard')
+  const cw = el('div', 'crumbwrap')
+  const names = el('div', 'components')
+  const chain = sel.components.length ? sel.components : ['host element']
+  chain.forEach((n, i) => { if (i) names.appendChild(el('span', 'sep', '‹')); names.append(n) })
+  if (multi.length) names.appendChild(el('span', 'plus', `+${multi.length} selected`))
+  const src = el('div', 'srcline mono'); const a = el('a', null, sel.loc.file + ':' + sel.loc.line); a.title = 'Open in editor'; a.onclick = () => send({ t: 'open', loc: sel.loc }); src.appendChild(a)
+  cw.append(names, src); card.appendChild(cw)
+
+  if (sel.classes !== null) {
+    const strip = el('div', 'tokens')
+    const shownDraft = new Set(Object.keys(draft))
+    if (!sel.classes.length && !shownDraft.size) strip.appendChild(el('span', 'none', 'no classes yet'))
+    for (const t of sel.classes) { const managed = MANAGED.some((g) => matchGroup(t, g) !== null); const arb = /\[[^\]]*\]/.test(t); strip.appendChild(el('span', 'tk' + (arb ? ' arb' : managed ? ' mine' : ''), t)) }
+    for (const [g, v] of Object.entries(draft)) {
+      const chip = el('span', 'tk draft', g === 'text-size' ? 'text-' + v : g === 'font-weight' || g === 'font-family' ? 'font-' + v : v === 'DEFAULT' ? g : `${g}-${v}`)
+      chip.title = 'Click to reset this change'
+      chip.onclick = () => unstage(g)
+      strip.appendChild(chip)
+    }
+    card.appendChild(strip)
+  }
+  crumb.appendChild(card)
+
+  if (sel.dirty) c.appendChild(el('div', 'banner amber', 'This file has uncommitted manual changes — consider committing first.'))
+
+  if (sel.classes === null) {
+    const r = el('div', 'refused'); r.appendChild(el('b', null, 'Can’t edit this safely'))
+    r.appendChild(el('div', 'why', sel.reason === 'no-classname' ? 'This element has no className to edit.' : 'Its className is computed at runtime, so Writeback refuses instead of guessing.'))
+    if (sel.hints?.length) { const h = el('div', 'hints'); h.appendChild(el('div', 'lead', 'The classes likely come from a call site — edit there:')); for (const hint of sel.hints) { const link = jumpLink(hint); link.textContent = `${hint.component} · ${link.textContent}`; h.appendChild(link) } r.appendChild(h) }
+    c.appendChild(r); updateActionBar(); return
+  }
+
+  if (sel.instance) {
+    const b = el('div', 'banner'); b.append('Edits change the ', el('b', null, sel.instance.component), ' component — every instance updates. ')
+    if (!sel.instance.forwards) b.append('It doesn’t accept a className prop, so per-instance editing isn’t possible.')
+    else if (sel.hints?.length) { b.append('To change just one, edit its call site: '); sel.hints.forEach((hint) => b.appendChild(jumpLink(hint))) }
+    c.appendChild(b)
+  }
+
+  c.appendChild(makeSection('Spacing', [
+    stepperOver('p', 'padding', config.spacing), stepperOver('px', 'pad x', config.spacing), stepperOver('py', 'pad y', config.spacing),
+    stepperOver('m', 'margin', config.spacing), stepperOver('gap', 'gap', config.spacing),
+  ]))
+  c.appendChild(makeSection('Typography', [
+    stepperOver('text-size', 'size', SIZES, { startAt: SIZES.indexOf('base'), previewCss: (v) => v && { fontSize: SIZE_CSS[v] } }),
+    stepperOver('font-weight', 'weight', WEIGHTS, { startAt: WEIGHTS.indexOf('normal'), previewCss: (v) => v && { fontWeight: String(WEIGHT_CSS[v]) } }),
+    selectOver('font-family', 'font', Object.keys(config.fonts || {})),
+    stepperOver('tracking', 'tracking', TRACKING, { startAt: TRACKING.indexOf('normal') }),
+    stepperOver('leading', 'leading', LEADING, { startAt: LEADING.indexOf('normal') }),
+  ]))
+  c.appendChild(makeSection('Colors', [colorBlock('text', 'Text'), colorBlock('bg', 'Background')]))
+  c.appendChild(makeSection('Appearance', [
+    stepperOver('rounded', 'radius', ROUNDED, { startAt: ROUNDED.indexOf('md') }),
+    stepperOver('shadow', 'shadow', SHADOWS, { startAt: SHADOWS.indexOf('DEFAULT') }),
+    sliderOver('opacity', 'opacity', 100, 5),
+  ]))
+  if (sel.blast?.length) c.appendChild(el('div', 'banner', 'cva variants here (edits target the active variant slot): ' + sel.blast.join(' · ')))
+  updateActionBar()
+}
+
+connect()
+</script>
+</body>
+</html>
