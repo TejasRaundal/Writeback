@@ -66,6 +66,14 @@ Click the Writeback toolbar icon, then click any element.
 - **Trust features:** live WCAG contrast with an AA-only filter, per-edit diff, an undo history that reverts the file, jump-to-source, and a session changelog at `/export`.
 - **Refusals are a feature.** Computed classNames (`clsx` with conditions, dynamic `cva`, props) are refused at click time with a link to the call site — the tool tells you it can't be sure, instead of guessing wrong.
 
+### Panel header controls
+
+Three buttons sit in the top-right of the panel:
+
+- **◇ Drift radar** (or press `d`) — toggles a dashed amber outline around every element whose className uses an **arbitrary value** (`p-[13px]`, `bg-[#1e1e2e]`, `leading-[1.15]`) — the one-off values that have drifted off your design scale. It's a read-only audit: nothing is changed, it just shows you where to look. The radar stays live as you edit — HMR re-renders and route changes are re-scanned automatically — and the button tooltip reports the count (`3 off-scale values`).
+- **export** — opens the **session changelog** in a new tab: a Markdown document of every edit Writeback has written to your source this session, one `## file` section per file with a `diff` block. Built from the journal (`.writeback/journal.jsonl`); handy to paste into a PR description or review before committing.
+- **🌙 / ☀️ Theme** — switches the panel between light and dark (remembered across sessions); independent of your app's theme.
+
 ## Use it from an AI agent
 
 The bridge exposes the same safe pipeline to agents — they edit styling without loading files into context and can't produce a broken file. See **[AGENTS.md](AGENTS.md)** for the full contract.
