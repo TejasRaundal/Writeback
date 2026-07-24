@@ -90,20 +90,36 @@ function ensurePanel() {
 
 // ── drift radar: outline every off-scale (arbitrary-value) token in amber ──
 const DRIFT_RE = /(^|\s|:)-?[\w-]+-\[[^\]]+\]/
+let driftObserver = null
+function markDrift() {
+  let n = 0
+  document.querySelectorAll('[data-wb-drift]').forEach((el) => el.removeAttribute('data-wb-drift'))
+  document.querySelectorAll('[class]').forEach((el) => {
+    const cls = typeof el.className === 'string' ? el.className : ''
+    if (DRIFT_RE.test(cls)) { el.setAttribute('data-wb-drift', ''); n++ }
+  })
+  panel?.contentWindow.postMessage({ t: 'wb-drift-state', on: drift, count: n }, BRIDGE)
+}
 function setDrift(on) {
   drift = on
-  document.querySelectorAll('[data-wb-drift]').forEach((el) => el.removeAttribute('data-wb-drift'))
   if (!document.getElementById('wb-drift-style')) {
     const s = document.createElement('style')
     s.id = 'wb-drift-style'
     s.textContent = '[data-wb-drift]{outline:1.5px dashed #f59e0b !important;outline-offset:1px;}'
     document.documentElement.appendChild(s)
   }
-  if (!on) return
-  document.querySelectorAll('[class]').forEach((el) => {
-    const cls = typeof el.className === 'string' ? el.className : ''
-    if (DRIFT_RE.test(cls)) el.setAttribute('data-wb-drift', '')
-  })
+  if (!on) {
+    driftObserver?.disconnect(); driftObserver = null
+    document.querySelectorAll('[data-wb-drift]').forEach((el) => el.removeAttribute('data-wb-drift'))
+    panel?.contentWindow.postMessage({ t: 'wb-drift-state', on: false, count: 0 }, BRIDGE)
+    return
+  }
+  markDrift()
+  // ponytail: full re-scan per mutation batch so HMR edits / re-renders / route
+  // changes stay flagged (the radar was a stale one-shot before). Scope to changed
+  // subtrees if this ever gets slow. attributeFilter:['class'] avoids self-retrigger.
+  driftObserver = new MutationObserver(() => markDrift())
+  driftObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] })
 }
 
 document.addEventListener('mousemove', (e) => {
@@ -205,7 +221,7 @@ window.addEventListener('message', (ev) => {
     }
   }
   if (d?.t === 'wb-preview-clear') clearPreview()
-  if (d?.t === 'wb-drift-toggle') { setDrift(!drift); panel?.contentWindow.postMessage({ t: 'wb-drift-state', on: drift }, BRIDGE) }
+  if (d?.t === 'wb-drift-toggle') setDrift(!drift) // setDrift echoes wb-drift-state
 })
 
 // ── keyboard nudging: arrows step spacing on the selected element ──
@@ -219,8 +235,7 @@ document.addEventListener('keydown', (e) => {
     return
   }
   if (e.key === 'd' && !e.altKey && !e.ctrlKey && e.target === document.body) {
-    setDrift(!drift)
-    panel?.contentWindow.postMessage({ t: 'wb-drift-state', on: drift }, BRIDGE)
+    setDrift(!drift) // setDrift echoes wb-drift-state
     return
   }
   if (!selected || !panel) return

@@ -340,7 +340,12 @@ window.addEventListener('message', (e) => {
     if (next !== undefined) stage(d.group, next)
   }
   if (d?.t === 'wb-deselect') { sel = null; multi = []; draft = {}; previewClear(); showEmpty() }
-  if (d?.t === 'wb-drift-state') $('driftToggle').classList.toggle('on', !!d.on)
+  if (d?.t === 'wb-drift-state') {
+    $('driftToggle').classList.toggle('on', !!d.on)
+    $('driftToggle').title = !d.on ? 'Drift radar — outline off-scale values'
+      : d.count ? `Drift radar: ${d.count} off-scale value${d.count === 1 ? '' : 's'}`
+      : 'Drift radar: no off-scale values found'
+  }
 })
 
 function onMessage(e) {
