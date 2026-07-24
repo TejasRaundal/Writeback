@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo-mark.svg" alt="" height="140" />
+  <img src="assets/logo-mark.svg" alt="" width="140" height="140" />
   <h1>Writeback</h1>
   <p><strong>DevTools that writes back.</strong></p>
   <p>Click any element in your running app, adjust it visually, and the change lands in your <em>real source file</em> — constrained to your design system.</p>
