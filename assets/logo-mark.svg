@@ -9,8 +9,8 @@
   -->
   <g transform="translate(1 0)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
     <!-- Return hook: the write-back loop (accent) -->
-    <path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--wb-accent, currentColor)"/>
+    <path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--wb-accent, #5B5BD6)"/>
     <!-- Caret: the write cursor (ink), sized to sit close to the hook without touching -->
-    <path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="var(--wb-ink, currentColor)"/>
+    <path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="var(--wb-ink, #17171F)"/>
   </g>
 </svg>
