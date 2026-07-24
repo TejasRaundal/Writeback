@@ -11,3 +11,6 @@ packages/vite-plugin/panel/
 # redundant local design dupes — canonical is artifacts/brand.html
 assets/brand.html
 assets/brand-artifact.html
+
+# local-only session handover notes
+HANDOVER.md
