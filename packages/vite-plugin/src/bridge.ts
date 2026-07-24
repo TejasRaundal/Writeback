@@ -117,7 +117,12 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
         res.end(JSON.stringify(replies.length === 1 ? replies[0] : replies))
       })
     } else if (req.url === '/export') {
-      res.writeHead(200, { 'content-type': 'text/markdown' })
+      // text/plain so the browser shows the changelog in the tab instead of
+      // downloading an extensionless blob; filename set for those who save it.
+      res.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        'content-disposition': 'inline; filename="writeback-changes.md"',
+      })
       res.end(exportMarkdown())
     } else if (req.url === '/' || req.url?.startsWith('/panel')) {
       // monorepo: src|dist → ../../panel; published npm package: dist → ../panel
