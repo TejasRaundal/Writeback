@@ -34,7 +34,8 @@ function Card({ title, value, note }: { title: string; value: string; note: stri
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
       <h3 className="text-sm text-pink-950 mb-2 bg-red-50">{title}</h3>
-      <p className="text-3xl font-bold text-red-600 bg-green-200 font-serif">{value}</p>
+      {/* arbitrary value — deliberate drift-radar target (off the design scale) */}
+      <p className="text-3xl font-bold text-red-600 bg-green-200 font-serif leading-[1.15]">{value}</p>
       <p className="text-xs text-emerald-400 mt-3">{note}</p>
     </div>
   )
@@ -46,7 +47,8 @@ export default function App() {
     <div className="min-h-screen bg-slate-950">
       <Nav />
       <main className="mx-auto max-w-5xl px-8 py-10">
-        <h1 className="text-2xl font-bold text-rose-500 mb-1 p-3.5 px-3.5 gap-6 bg-red-50">Overview</h1>
+        {/* arbitrary bg-[#hex] — another deliberate drift-radar target */}
+        <h1 className="text-2xl font-bold text-rose-500 mb-1 p-3.5 px-3.5 gap-6 bg-[#1e1e2e]">Overview</h1>
         <p className="text-slate-400 mb-8">Last 30 days across all projects.</p>
 
         <div className="grid grid-cols-3 gap-4 mb-10">
