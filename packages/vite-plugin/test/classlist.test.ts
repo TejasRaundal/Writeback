@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyTokenEdit, parseToken } from '../src/classlist'
+import { applyTokenEdit, chainKey, parseToken, removeTokenGroup, validTokenEdit } from '../src/classlist'
 
 describe('parseToken', () => {
   it('spacing groups', () => {
@@ -116,5 +116,133 @@ describe('applyTokenEdit', () => {
   })
   it('shadow edit leaves shadow colors alone', () => {
     expect(applyTokenEdit('shadow-md shadow-red-500', ed('shadow', 'xl'))).toBe('shadow-xl shadow-red-500')
+  })
+
+  // Feature A: the panel now emits variant ops, so the token BUILDER has to be right for
+  // every shape the base chain supports — bare defaults, negatives, arbitrary escape hatches.
+  it('builds prefixed tokens for the DEFAULT (bare) values', () => {
+    expect(applyTokenEdit('rounded-lg', ed('rounded', 'DEFAULT', ['hover']))).toBe('rounded-lg hover:rounded')
+    expect(applyTokenEdit('hover:rounded p-4', ed('rounded', 'xl', ['hover']))).toBe('hover:rounded-xl p-4')
+    expect(applyTokenEdit('shadow', ed('shadow', 'lg', ['dark']))).toBe('shadow dark:shadow-lg')
+  })
+  it('keeps the negative sign inside the variant prefix', () => {
+    expect(applyTokenEdit('mt-2', ed('mt', '-4', ['md']))).toBe('mt-2 md:-mt-4')
+    expect(applyTokenEdit('md:-mt-4', ed('mt', '8', ['md']))).toBe('md:mt-8')
+  })
+  it('arbitrary values survive the variant prefix', () => {
+    expect(applyTokenEdit('p-4', ed('p', '[17px]', ['hover']))).toBe('p-4 hover:p-[17px]')
+    expect(parseToken('hover:p-[17px]')).toEqual({ group: 'p', variants: ['hover'], value: '[17px]' })
+  })
+  it('a multi-segment chain is its own group, distinct from each single variant', () => {
+    expect(applyTokenEdit('hover:bg-red-500 md:bg-blue-500', ed('bg', 'black', ['md', 'hover'])))
+      .toBe('hover:bg-red-500 md:bg-blue-500 md:hover:bg-black')
+    expect(applyTokenEdit('md:hover:bg-black', ed('bg', 'white', ['md', 'hover']))).toBe('md:hover:bg-white')
+  })
+  it('a variant edit never disturbs the base token, and vice versa', () => {
+    expect(applyTokenEdit('bg-white text-sm', ed('bg', 'slate-800', ['dark']))).toBe('bg-white text-sm dark:bg-slate-800')
+    expect(applyTokenEdit('bg-white dark:bg-slate-800', ed('bg', 'slate-100'))).toBe('bg-slate-100 dark:bg-slate-800')
+  })
+})
+
+// Review finding: `hover:md:p-2` and `md:hover:p-2` are ONE conflict group (same media query,
+// same pseudo-class) — comparing chains as ordered strings made them two and blind-appended a
+// competitor, which stylesheet order, not class order, would then resolve.
+describe('variant chains are compared as SETS, not as ordered strings', () => {
+  const ed = (group: any, value: string, variants: string[] = []) => ({ group, variants, value })
+
+  it('a chain is the same group however its segments are ordered', () => {
+    expect(applyTokenEdit('hover:md:p-2 flex', ed('p', '8', ['md', 'hover']))).toBe('md:hover:p-8 flex')
+    expect(applyTokenEdit('md:hover:p-2 flex', ed('p', '8', ['hover', 'md']))).toBe('hover:md:p-8 flex')
+    // …and it is still distinct from each single-variant chain and from the base
+    expect(applyTokenEdit('p-2 md:p-4 hover:md:p-6', ed('p', '8', ['md', 'hover'])))
+      .toBe('p-2 md:p-4 md:hover:p-8')
+  })
+
+  it('removeTokenGroup matches a reordered chain too', () => {
+    expect(removeTokenGroup('p-2 hover:md:p-4 gap-2', 'p', 'md:hover')).toBe('p-2 gap-2')
+    expect(removeTokenGroup('p-2 hover:md:p-4', 'p', 'md')).toBe('p-2 hover:md:p-4') // a different group
+  })
+
+  it('drops duplicate members of the same variant chain, keeping the first position', () => {
+    expect(applyTokenEdit('hover:p-2 flex hover:p-4', ed('p', '6', ['hover']))).toBe('hover:p-6 flex')
+  })
+
+  it('chainKey collapses order and duplicate segments', () => {
+    expect(chainKey(['md', 'hover'])).toBe(chainKey(['hover', 'md']))
+    expect(chainKey(['hover', 'hover'])).toBe(chainKey(['hover']))
+    expect(chainKey([])).toBe('')
+  })
+})
+
+// Review finding: rebuilding the list with single spaces reflowed a multi-line className,
+// rewriting lines the user never touched (and fighting their formatter).
+describe('whitespace between tokens survives an edit', () => {
+  const ed = (group: any, value: string, variants: string[] = []) => ({ group, variants, value })
+  const MULTI = `
+      p-4
+      m-2
+      text-white
+    `
+
+  it('replacing a token leaves every other line byte-identical', () => {
+    expect(applyTokenEdit(MULTI, ed('p', '8'))).toBe(MULTI.replace('p-4', 'p-8'))
+  })
+  it('appending a token reuses the separator between the existing ones', () => {
+    expect(applyTokenEdit(MULTI, ed('gap', '2'))).toBe(MULTI.replace('text-white', `text-white
+      gap-2`))
+  })
+  it('removing a token takes its own trailing whitespace with it', () => {
+    expect(removeTokenGroup(MULTI, 'text', '')).toBe(`
+      p-4
+      m-2
+    `)
+    expect(removeTokenGroup(MULTI, 'm', '')).toBe(`
+      p-4
+      text-white
+    `)
+  })
+  it('a single-space list is still a single-space list', () => {
+    expect(applyTokenEdit('flex p-4 text-sm', ed('p', '6'))).toBe('flex p-6 text-sm')
+    expect(applyTokenEdit('flex', ed('p', '6'))).toBe('flex p-6')
+  })
+})
+
+// Review finding: `variants`/`value` reached the splice unvalidated. Reparse-verify only proves
+// the FILE parses — `p-4" onClick={…} x="` produces a perfectly valid file with an injected
+// handler, and a variant of `${require('fs')…}` turns a static template literal into code.
+describe('validTokenEdit — the charset gate before any splice', () => {
+  const ed = (group: any, value: string, variants: string[] = []) => ({ group, variants, value })
+
+  it('accepts every shape the product actually emits', () => {
+    for (const e of [
+      ed('p', '4'), ed('p', '-4'), ed('p', '[17px]'), ed('bg', 'slate-900'),
+      ed('rounded', 'DEFAULT', ['hover']), ed('text', 'red-500', ['md', 'hover']),
+      ed('bg', '[url(a:b)]'), ed('font-family', 'sans'),
+    ]) expect(validTokenEdit(e)).toBe(true)
+  })
+
+  it('rejects anything that could break out of the string literal', () => {
+    for (const e of [
+      ed('p', '4" onClick={alert(1)} x="'),
+      ed('p', "4' onClick='x"),
+      ed('p', '4 flex'),                       // whitespace = a second token smuggled in
+      ed('p', '4`'),
+      ed('p', '4${x}'),
+      ed('p', '4' + String.fromCharCode(92)), // a trailing backslash escapes the closing quote
+      ed('p', '4}{'),
+      ed('p', '4', ['${require("fs")}']),      // the variant half of the same hole
+      ed('p', '4', ['hover"']),
+      ed('p', '4', ['']),
+      ed('p', '4', ['a:b']),                   // a chain segment is never itself a chain
+      ed('p', 'x'.repeat(300)),
+    ]) expect(validTokenEdit(e as any)).toBe(false)
+  })
+})
+
+describe('removeTokenGroup', () => {
+  it('removes only the given (group, chain) pair', () => {
+    expect(removeTokenGroup('p-2 hover:p-4 gap-2', 'p', '')).toBe('hover:p-4 gap-2')
+    expect(removeTokenGroup('p-2 hover:p-4 gap-2', 'p', 'hover')).toBe('p-2 gap-2')
+    expect(removeTokenGroup('p-2 hover:p-4', 'p', 'md')).toBe('p-2 hover:p-4') // no member of that chain
   })
 })

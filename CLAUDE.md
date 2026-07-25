@@ -31,10 +31,13 @@ from the project's real design scale, and the edit lands in the actual source fi
 ## Milestones
 
 M0 ✅ M1 ✅ (gate: `pnpm test`) · M2 mostly ✅ (v3 fixture project still owed) · M3 ✅ (dry-run diff approval, journal UI, bulk) ·
-M4 ✅ (static clsx args ✅, per-instance call-site edits via `target:'callsite'` — server-enforced forwards check) · M5 partial (cva base + active-slot editing ✅; `@theme` token editing pending) ·
-Editable groups: spacing, bg/text color, text-size, font-weight/family, tracking, leading, rounded, shadow, opacity.
+M4 ✅ (static clsx args ✅, per-instance call-site edits via `target:'callsite'` — server-enforced forwards check, panel instance-mode UI) · M5 ✅ (cva base + active-slot editing, cross-file cva; `@theme` token editing via `{t:'token'}` — v4 only, existing tokens only, hash required) ·
+M6 seeded (checkpoint mode: `{t:'checkpoint'}` → `writeback/<ts>` branch via temp index — working tree/branch NEVER touched; full PR mode pending) ·
+Editable groups: spacing, bg/text color, text-size, font-weight/family, tracking, leading, rounded, shadow, opacity — each per variant chain (`op.variants`, chains compare as sets) · element text via `{kind:'text'}` op (single static JSXText child → `resolved.text`; works on class-refused elements).
+Conditional clsx: static args editable; branch-owned groups surface as `resolved.locked`, refuse `locked-group` (all chains).
 OP features: nudging ✅ drift radar ✅ attribution v0 ✅ contrast ✅ copy/paste ✅ blast-list v0 ✅ git guardrail ✅ MCP ✅ export ✅ · CSS Modules/styled-components deferred.
-Agent transports: MCP (`src/mcp.ts`) + `POST /api` (same protocol over HTTP) — see `AGENTS.md`.
-Panel: light/dark themed (toggle in header), collapsible Spacing/Typography/Colors/Appearance sections,
-Write rail (staged edits as diff lines; Review = server dry-run diff, then Write; bulk multi-select writes directly — protocol bulk has no dry mode).
+Agent transports: MCP (`packages/mcp/src/mcp.ts`, 4 tools — text/token/checkpoint are `/api`-only by choice) + `POST /api` (same protocol over HTTP) — see `AGENTS.md`.
+Panel: light/dark themed (toggle in header), collapsible Text/Spacing/Typography/Colors/Appearance sections, variant chip row,
+Write rail (staged edits as diff lines; Review = server dry-run diff, then Write; bulk multi-select writes directly — protocol bulk has no dry mode),
+instance-edit mode, token pencil editors, checkpoint composer.
 See `DECISIONS.md` for what "v0/deferred" means per feature.

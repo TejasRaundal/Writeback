@@ -60,19 +60,23 @@ Chrome / Edge / Brave → `chrome://extensions` → enable **Developer mode** �
 
 Click the Writeback toolbar icon, then click any element.
 
-- **Stage → Save.** Every control previews live on the page — nothing is written until you hit **Save**. **Reset** discards the draft and restores the original. Edited values show in accent; unset ones show the greyed computed value so you always see what you're changing *from*.
-- **Steppers & swatches** are fed from your **actual** Tailwind theme (v3 config or v4 `@theme`) — spacing, colors, type scale, radius, shadow, opacity. Off-scale values require an explicit, amber-flagged custom entry.
-- **Keyboard:** `↑`/`↓` step padding, `Alt`+arrows margin, `Shift`+arrows gap, `d` drift radar (outlines off-scale values), `Shift`+click multi-select, `Esc` deselect.
-- **Trust features:** live WCAG contrast with an AA-only filter, per-edit diff, an undo history that reverts the file, jump-to-source, and a session changelog at `/export`.
-- **Refusals are a feature.** Computed classNames (`clsx` with conditions, dynamic `cva`, props) are refused at click time with a link to the call site — the tool tells you it can't be sure, instead of guessing wrong.
+- **Stage → Review → Write.** Every control previews live on the page; staged changes collect in the **Write rail** as real diff lines (`− p-6  + p-8`). **Review diff** shows the server's dry-run of the exact source hunk before anything touches disk; **Write to <file>** commits it. **Discard** (or per-line ✕) restores the original. Staged values render inline as `6 → 8`; unset ones show the greyed computed value so you always see what you're changing *from*.
+- **Text too.** An element with plain text gets a **Text** field — edit the copy, watch it live, and it writes back into the JSX (safely escaped, whatever you type). Works even when the element's *className* is refused — computed classes don't make the text dynamic.
+- **Variants.** A chip row (`base · hover: · focus: · dark: · md: · lg:`) scopes every control to that state or breakpoint — edits write the prefixed token (`hover:bg-emerald-300`) and never clobber the base value. (No live preview off `base`; the Review diff is the feedback there.)
+- **Per-instance edits.** Clicking inside a shared component edits its definition — the panel says so. When the component forwards `className`, an **"Edit only this instance"** action switches to the call site: edits land on that one usage (appending a `className` if it has none).
+- **Steppers & swatches** are fed from your **actual** Tailwind theme (v3 config or v4 `@theme`) — spacing, colors, type scale, radius, shadow, opacity. Off-scale values require an explicit, amber-flagged custom entry. On Tailwind v4, project tokens get a pencil: **edit the token itself** (`--color-primary`) and every use of it updates — behind an explicit confirm, since that rewrites the design system.
+- **Keyboard:** `↑`/`↓` step padding, `Alt`+arrows margin, `Shift`+arrows gap, `d` drift radar (outlines off-scale values), `Shift`+click multi-select, `Ctrl/⌘+Enter` review-then-write, `Esc` deselect.
+- **Trust features:** live WCAG contrast with an AA-only filter, dry-run diffs before every write, an undo history that reverts the file, jump-to-source, a session changelog at `/export`, and one-click **checkpoint** — every file this session touched, committed to a fresh `writeback/<timestamp>` git branch without disturbing your working tree.
+- **Refusals are a feature.** Fully-computed classNames are refused at click time with a link to the call site. Partially-dynamic ones (`clsx('p-2', cond && 'bg-x')`) stay editable — the static part is yours, the conditional groups render locked with a reason.
 
 ### Panel header controls
 
-Three buttons sit in the top-right of the panel:
+The buttons in the top-right of the panel:
 
 - **◇ Drift radar** (or press `d`) — toggles a dashed amber outline around every element whose className uses an **arbitrary value** (`p-[13px]`, `bg-[#1e1e2e]`, `leading-[1.15]`) — the one-off values that have drifted off your design scale. It's a read-only audit: nothing is changed, it just shows you where to look. The radar stays live as you edit — HMR re-renders and route changes are re-scanned automatically — and the button tooltip reports the count (`3 off-scale values`).
 - **export** — opens the **session changelog** in a new tab: a Markdown document of every edit Writeback has written to your source this session, one `## file` section per file with a `diff` block. Built from the journal (`.writeback/journal.jsonl`); handy to paste into a PR description or review before committing.
-- **🌙 / ☀️ Theme** — switches the panel between light and dark (remembered across sessions); independent of your app's theme.
+- **checkpoint** — commits every file this session touched to a new `writeback/<timestamp>` branch (optional message; the changelog becomes the commit body). Your working tree and current branch are never touched — no checkout, no reset, ever.
+- **☾ / ☀ Theme** — switches the panel between light and dark (remembered across sessions); independent of your app's theme.
 
 ## Use it from an AI agent
 
@@ -91,7 +95,7 @@ claude mcp add writeback -- node <repo>/packages/mcp/dist/mcp.js
 curl -s -X POST 127.0.0.1:7331/api -d '{"t":"config"}'   # the design scale
 ```
 
-Tools: `get_scale`, `resolve`, `edit`, `undo`. Port override: `WRITEBACK_PORT`.
+Tools: `get_scale`, `resolve`, `edit` (variants + per-instance `target:"callsite"`), `undo`. The full wire protocol — text edits, `@theme` token edits, checkpoints, bulk, dry-run — rides the `/api` transport; MCP deliberately stays a small surface. Port override: `WRITEBACK_PORT`.
 
 ## Scope
 
@@ -127,7 +131,7 @@ pnpm release      # build + pack + full test
 
 ## Status
 
-The core round trip, constrained inputs for both Tailwind v3 and v4, trust features (diff, journal, bulk), instance-vs-component awareness, `cva` editing, live-preview staging, and the agent transports are all working, with 57 engine unit tests and a Playwright e2e gate. Deferred: cross-file `cva`, CSS-Modules / styled-components write-back, and branch/PR mode — see [DECISIONS.md](DECISIONS.md).
+The core round trip, constrained inputs for both Tailwind v3 and v4, the Write rail (dry-run review → write), text editing, variant (`hover:`/`md:`/`dark:`) editing, cross-file `cva` editing, partial editing of conditional `clsx`, per-instance call-site edits, `@theme` token editing (v4), session checkpoints to a git branch, and the agent transports are all working — 266 engine unit tests plus a 10-scenario Playwright e2e gate. Deferred: CSS-Modules / styled-components write-back and full PR mode — see [DECISIONS.md](DECISIONS.md).
 
 ## License
 

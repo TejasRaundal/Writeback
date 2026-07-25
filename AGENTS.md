@@ -70,6 +70,44 @@ curl -s -X POST 127.0.0.1:7331/api -d '{"t":"journal"}'
 #   add "dry":true to an edit for a no-write diff preview
 ```
 
+## Variants (`hover:` / `md:` / `dark:` …)
+
+`op.variants` is a chain of state/breakpoint prefixes. `{"group":"bg","variants":["hover"],"value":"emerald-300"}`
+writes `hover:bg-emerald-300`, replacing only within that same chain — base and variant values of one
+group are independent tokens and never clobber each other (chains compare as sets, so `md:hover:` ==
+`hover:md:`). Off-scale enforcement applies to variant ops exactly like base ones. A `locked` group is
+locked for **every** chain.
+
+## Editing an element's TEXT (`op: {"kind":"text","value":"…"}`)
+
+When `resolved.text` is present (the element has exactly one static text child — also on elements whose
+*className* is refused; computed classes don't make the text dynamic), an edit op of
+`{"kind":"text","value":"New label"}` replaces that text. Same pipeline: AST splice, reparse-verify,
+journal/undo, `dry` supported. Values containing `{ } < >` or meaningful whitespace are written as a
+`{"…"}` JSX expression, so any string is safe. Never scale-checked. This is intentionally **not** an MCP
+tool (an agent that wants to rewrite text at scale can edit the file); it exists on the wire because the
+panel uses it — over `/api` it simply works.
+
+## Design-token editing (`{"t":"token"}`) — Tailwind v4 `@theme`
+
+Edit an existing design token itself (every utility using it updates):
+
+```sh
+curl -s -X POST 127.0.0.1:7331/api -d '{"t":"config"}'                       # tokens + hash source
+curl -s -X POST 127.0.0.1:7331/api -d '{"t":"token","id":"t1","name":"--color-primary","value":"#0b7a6e","hash":"<from resolve/config flow>"}'
+```
+
+Only tokens that already exist in the project's `@theme` block are editable (no creation); duplicates or
+ambiguity refuse. `hash` is **required** — this rewrites the design system, so it is never accepted
+unlocked. Journal/undo/`/export` cover it like any other edit. v4 only.
+
+## Session checkpoint (`{"t":"checkpoint"}`)
+
+Snapshots every journal-touched file onto a new git branch `writeback/<timestamp>` **without touching
+the working tree or current branch** (temporary index, no checkout/reset ever). Reply:
+`{"t":"checkpointed","branch":"writeback/…","commit":"…"}`. Refused `unknown-edit` when the journal is
+empty, `git-unavailable` outside a repo. The commit body is the session changelog (`/export`).
+
 ## Editing ONE instance instead of the shared component (`target:"callsite"`)
 
 A `loc` inside a reusable component (`<Card>`'s own markup) edits the **component definition** —
@@ -90,6 +128,9 @@ curl -s -X POST 127.0.0.1:7331/api -d '{"t":"edit","id":"i1","target":"callsite"
 ```
 
 - The edit always lands in the **call-site file**, never the component's.
+- Resolving a component USAGE also returns `own: {classes}` — the usage's **own** className attribute
+  (`[]` = none yet, the write will append it; `null` = computed, a call-site edit would refuse). Its
+  presence is the "is this call-site-editable" test.
 - The usage's className is handled three ways: a **static string** (or expression-free template)
   gets the normal group-aware replacement; **no `className` at all** gets a brand-new
   `className="…"` attribute appended (still an AST splice + reparse-verify — the only place
@@ -139,8 +180,13 @@ Sources, in preference order:
 - The playground for smoke-testing lives at `apps/playground` (`pnpm dev`).
 - Verification commands: `pnpm --filter @writeback/vite-plugin test` (engine), `pnpm test` (e2e round trip).
 
+- `reason:"off-scale"` also covers **malformed values**: whitespace, quotes, braces, `$`, backslashes
+  and `:` inside a chain segment are refused before any splice — token values are class tokens, not
+  markup.
+
 ## Security note
 
-The bridge binds 127.0.0.1 only. Browser-originated requests are origin-checked; requests
-without an Origin header (curl, Node, MCP) are treated as the local user. Do not proxy or
+The bridge binds 127.0.0.1 only. Browser-originated requests must come from the bridge's **own
+origin** (the served panel); every other web origin — including other localhost ports — is rejected.
+Requests without an Origin header (curl, Node, MCP) are treated as the local user. Do not proxy or
 tunnel the port.

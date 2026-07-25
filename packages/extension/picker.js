@@ -207,6 +207,7 @@ document.addEventListener('click', (e) => {
 function clearPreview() {
   if (!previewSaved) return
   for (const [k, v] of Object.entries(previewSaved.props)) previewSaved.el.style[k] = v
+  if (previewSaved.text !== undefined) previewSaved.el.textContent = previewSaved.text
   previewSaved = null
 }
 window.addEventListener('message', (ev) => {
@@ -218,6 +219,11 @@ window.addEventListener('message', (ev) => {
     for (const [k, v] of Object.entries(d.style)) {
       previewSaved.props[k] = selected.el.style[k]
       selected.el.style[k] = v
+    }
+    // staged text edit — the panel only sends this for single-text-child elements
+    if (d.text != null) {
+      previewSaved.text = selected.el.textContent
+      selected.el.textContent = d.text
     }
   }
   if (d?.t === 'wb-preview-clear') clearPreview()

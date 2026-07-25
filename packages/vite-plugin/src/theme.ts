@@ -29,13 +29,19 @@ export function cssVars(css: string): { colors: Record<string, string>; spacing:
   return { colors, spacing, fonts }
 }
 
-function* cssFiles(dir: string, depth = 3): Generator<string> {
+// exported so @theme token editing (src/token.ts) finds tokens in exactly the files the
+// scale was read from — a token the panel offers must be one getScale actually saw
+export function* cssFiles(dir: string, depth = 3): Generator<string> {
   if (depth === 0 || !existsSync(dir)) return
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.name === 'node_modules' || e.name.startsWith('.')) continue
     const p = join(dir, e.name)
+    // symlinks are never followed: a `src/theme.css -> ../../outside.css` link would put a
+    // token WRITE outside the project (the bridge's realpath check refuses it too — this is
+    // the other half, so such a file is never even offered as editable)
+    if (e.isSymbolicLink()) continue
     if (e.isDirectory()) yield* cssFiles(p, depth - 1)
-    else if (e.name.endsWith('.css')) yield p
+    else if (e.isFile() && e.name.endsWith('.css')) yield p
   }
 }
 

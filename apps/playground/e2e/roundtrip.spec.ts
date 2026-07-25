@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -283,4 +284,278 @@ test('conditional clsx elements resolve their static arg (Feature 1)', async ({ 
   } finally {
     ws.close()
   }
+})
+
+test('variant-chain edits write a prefixed token beside the base one (Feature A)', async ({ page }) => {
+  const original = readFileSync(APP, 'utf8')
+  await page.goto('http://localhost:5173')
+  const link = page.locator('nav a').filter({ hasText: 'Overview' })
+  const stamp = await link.getAttribute('data-wb')
+  const parts = stamp!.split(':')
+  const loc = { col: Number(parts.pop()), line: Number(parts.pop()), file: parts.join(':') }
+
+  const ws = await connect()
+  try {
+    const resolved = await request(ws, { t: 'resolve', loc }, 'resolved')
+    // variant tokens are ordinary classes to resolve — the panel's chip row scopes them
+    expect(resolved.classes).toContain('hover:text-white')
+
+    // an md: op appends a prefixed token; the base classes are a different conflict group
+    const edited = await request(
+      ws,
+      { t: 'edit', id: 'var-1', loc, hash: resolved.hash, op: { kind: 'tw', group: 'p', variants: ['md'], value: '2' } },
+      'edited',
+    )
+    expect(edited.t).toBe('edited')
+    const after = readFileSync(APP, 'utf8')
+    expect(after).toContain('text-slate-400 hover:text-white text-sm md:p-2')
+    await expect(link).toHaveClass(/md:p-2/, { timeout: 10_000 })
+
+    // and the variant token itself is editable in place, base left alone
+    const reresolved = await request(ws, { t: 'resolve', loc }, 'resolved')
+    const hovered = await request(
+      ws,
+      { t: 'edit', id: 'var-2', loc, hash: reresolved.hash, op: { kind: 'tw', group: 'text', variants: ['hover'], value: 'slate-100' } },
+      'edited',
+    )
+    expect(hovered.t).toBe('edited')
+    expect(readFileSync(APP, 'utf8')).toContain('text-slate-400 hover:text-slate-100 text-sm md:p-2')
+
+    await request(ws, { t: 'undo', id: 'var-2' }, 'edited')
+    await request(ws, { t: 'undo', id: 'var-1' }, 'edited')
+    expect(readFileSync(APP, 'utf8')).toBe(original)
+  } finally {
+    ws.close()
+    if (readFileSync(APP, 'utf8') !== original) writeFileSync(APP, original)
+  }
+})
+
+/**
+ * Feature B: the panel's per-instance mode, driven through the real panel UI (served by the
+ * bridge at /panel, so it can be loaded top-level and postMessage'd exactly like the
+ * extension does). This is the only test that proves the CLIENT half: that the controls in
+ * instance mode reflect the USAGE's own className (resolved.own) and that every edit leaves
+ * with target:'callsite'.
+ */
+test('the panel switches into per-instance mode and writes the call site (Feature B)', async ({ page }) => {
+  const original = readFileSync(APP, 'utf8')
+  // the Badge DEFINITION's root span — a cn(base, className) refusal that nonetheless
+  // forwards className, which is exactly what per-instance editing exists for
+  const defLine = original.split('\n').findIndex((l) => l.includes("<span className={clsx('rounded-full"))
+  // an exact line:col, the way the picker's data-wb stamp gives it — the panel matches the
+  // resolve reply against the loc it asked for, and a tolerant col-0 match echoes a different one
+  const defLoc = { file: 'src/App.tsx', line: defLine + 1, col: original.split('\n')[defLine].indexOf('<span') }
+
+  await page.goto('http://127.0.0.1:7331/panel')
+  // the panel only speaks once its own socket is up — the journal reply is the proof
+  await expect(page.locator('.histhead')).toBeVisible()
+
+  try {
+    await page.evaluate((loc) => window.postMessage({ t: 'wb-select', loc, components: ['Badge'], computed: {} }, '*'), defLoc)
+
+    // the definition refuses, but offers the switch per call site
+    await expect(page.locator('.refused .code')).toHaveText('computed-classname')
+    const go = page.locator('.instbtn').first()
+    await expect(go).toBeVisible()
+    await go.click()
+
+    // mode pill names the usage being edited, and the controls now show ITS classes
+    await expect(page.locator('.modepill')).toContainText('instance edit')
+    await expect(page.locator('.modepill .loc')).toContainText('App.tsx:')
+    await expect(page.locator('.tokens')).toContainText('px-3')
+
+    // bump `pad x` — the same stepper as definition mode, now addressing the usage
+    const padx = page.locator('.row').filter({ has: page.getByText('pad x', { exact: true }) })
+    await padx.locator('.stepper button').last().click()
+    await expect(page.locator('#rail')).toBeVisible()
+
+    // Review runs a server dry-run with target:'callsite' — the diff must be the USAGE line
+    await page.locator('#review').click()
+    await expect(page.locator('#dryrun')).toBeVisible()
+    await expect(page.locator('#drypre')).toContainText('<Badge className="px-3.5">Live</Badge>')
+    expect(readFileSync(APP, 'utf8')).toBe(original) // dry-run wrote nothing
+
+    await page.locator('#save').click()
+    await expect.poll(() => readFileSync(APP, 'utf8')).toContain('<Badge className="px-3.5">Live</Badge>')
+    // the Badge COMPONENT is untouched — only this one instance moved
+    expect(readFileSync(APP, 'utf8')).toContain("clsx('rounded-full px-2 py-0.5 text-xs")
+
+    // leaving instance mode returns to the component, which still refuses
+    await page.locator('.modepill .exit').click()
+    await expect(page.locator('.modepill')).toHaveCount(0)
+    await expect(page.locator('.refused .code')).toHaveText('computed-classname')
+
+    // undo from the panel's own history restores the file byte-identically
+    await page.locator('.journal .e button').first().click()
+    await expect.poll(() => readFileSync(APP, 'utf8')).toBe(original)
+  } finally {
+    if (readFileSync(APP, 'utf8') !== original) writeFileSync(APP, original)
+  }
+})
+
+/**
+ * Feature C: `@theme` design-token editing, driven through the real panel UI. This is the
+ * only edit in the product that does NOT go through the write rail — it rewrites the design
+ * system itself — so the things worth proving here are the ones the bridge tests cannot see:
+ * that the affordance appears only on swatches the server called editable, that the panel
+ * makes you confirm the unknowable blast radius, and that History undoes it like anything else.
+ */
+test('the panel edits an @theme token through its confirm step (Feature C)', async ({ page }) => {
+  const CSS = join(__dirname, '..', 'src', 'index.css')
+  const original = readFileSync(CSS, 'utf8')
+  const app = readFileSync(APP, 'utf8').split('\n')
+  // an ordinary editable element — any selection renders the Colors section
+  const line = app.findIndex((l) => l.includes('>Overview</a>'))
+  const loc = { file: 'src/App.tsx', line: line + 1, col: app[line].indexOf('<a') }
+
+  await page.goto('http://127.0.0.1:7331/panel')
+  await expect(page.locator('.histhead')).toBeVisible()
+
+  try {
+    await page.evaluate((l) => window.postMessage({ t: 'wb-select', loc: l, components: [], computed: {} }, '*'), loc)
+    await expect(page.locator('.tokens')).toContainText('text-slate-400')
+
+    // exactly one colour in the palette is a project token, and only it carries the ✎
+    const pen = page.locator('.colorblock').first().locator('.swpen')
+    await expect(pen).toHaveCount(1)
+    await expect(page.locator('.colorblock').first().locator('.swcell.istok .sw')).toHaveAttribute('title', /project token/)
+    await pen.click()
+
+    // the editor names the token AND the file it will rewrite, prefilled with the real value
+    await expect(page.locator('.tokedit .tname')).toHaveText('--color-brand · src/index.css')
+    await expect(page.locator('.tokedit input')).toHaveValue('#ff6600')
+    await page.locator('.tokedit input').fill('#00cc88')
+
+    // the blast radius is unknowable from here, so it is stated, not counted
+    await page.getByRole('button', { name: 'Save token…' }).click()
+    await expect(page.locator('.tokedit .warn')).toContainText('Changes every use of this token')
+    expect(readFileSync(CSS, 'utf8')).toBe(original) // nothing written until it is confirmed
+
+    await page.getByRole('button', { name: 'Apply to design system' }).click()
+    await expect.poll(() => readFileSync(CSS, 'utf8')).toContain('--color-brand: #00cc88;')
+    // only the value moved — the surrounding declarations are byte-identical
+    expect(readFileSync(CSS, 'utf8')).toBe(original.replace('#ff6600', '#00cc88'))
+
+    // the panel re-fetched config, so the swatch now paints the NEW value
+    await expect(page.locator('.colorblock').first().locator('.swcell.istok .sw'))
+      .toHaveCSS('background-color', 'rgb(0, 204, 136)')
+
+    // and it undoes from History like any other write
+    await page.locator('.journal .e button').first().click()
+    await expect.poll(() => readFileSync(CSS, 'utf8')).toBe(original)
+
+    // …including in the panel's own head: undo restored the FILE, so the design system the
+    // panel is holding has to come back with it. It used to keep the undone value (and the
+    // undone lock hash, which then refused every later token write as hash-mismatch).
+    await expect(page.locator('.colorblock').first().locator('.swcell.istok .sw'))
+      .toHaveCSS('background-color', 'rgb(255, 102, 0)')
+    await page.locator('.colorblock').first().locator('.swpen').click()
+    await expect(page.locator('.tokedit input')).toHaveValue('#ff6600')
+    await page.locator('.tokedit input').fill('#0044ff')
+    await page.getByRole('button', { name: 'Save token…' }).click()
+    await page.getByRole('button', { name: 'Apply to design system' }).click()
+    await expect.poll(() => readFileSync(CSS, 'utf8')).toContain('--color-brand: #0044ff;')
+    await page.locator('.journal .e button').first().click()
+    await expect.poll(() => readFileSync(CSS, 'utf8')).toBe(original)
+  } finally {
+    if (readFileSync(CSS, 'utf8') !== original) writeFileSync(CSS, original)
+  }
+})
+
+/**
+ * Review finding: a locked group (one a runtime conditional owns) rendered fully live controls.
+ * Every such edit is refused server-side, and staging one alongside a good edit was what made a
+ * REFUSED dry-run still render a diff and arm Write. The controls are inert now, so the whole
+ * sequence is unreachable from the UI.
+ */
+test('locked groups render read-only controls that cannot be staged', async ({ page }) => {
+  const original = readFileSync(APP, 'utf8')
+  const app = original.split('\n')
+  // the clsx element whose bg/text live in a `active ? … : …` branch
+  const line = app.findIndex((l) => l.includes("active ? 'bg-amber-500 text-black'")) - 1
+  const loc = { file: 'src/App.tsx', line: line + 1, col: app[line].indexOf('<button') }
+
+  await page.goto('http://127.0.0.1:7331/panel')
+  await expect(page.locator('.histhead')).toBeVisible()
+  await page.evaluate((l) => window.postMessage({ t: 'wb-select', loc: l, components: [], computed: {} }, '*'), loc)
+
+  // the server said `locked: [bg, text]`, and the banner says so for every variant chain
+  await expect(page.locator('.banner.amber')).toContainText('read-only in every variant')
+  const colors = page.locator('.colorblock').first()
+  await expect(colors).toHaveClass(/locked/)
+  await expect(colors.locator('.sw').first()).toBeDisabled()
+  await expect(colors.locator('.custom')).toBeDisabled()
+
+  // an editable group on the SAME element still stages normally — only the locked axes are inert
+  const padx = page.locator('.row').filter({ has: page.getByText('pad x', { exact: true }) })
+  await expect(padx).not.toHaveClass(/locked/)
+  await padx.locator('.stepper button').last().click()
+  await expect(page.locator('#rail')).toBeVisible()
+  await expect(page.locator('#railn')).toHaveText(/1 change/) // the locked group never joined it
+  expect(readFileSync(APP, 'utf8')).toBe(original) // staged only — nothing written
+})
+
+/**
+ * Feature D: the checkpoint composer. The bridge tests own the git half (they run in a
+ * throwaway repository); what only a browser can prove is the panel half — and specifically
+ * that the subject is asked for INLINE. The panel really ships inside a cross-origin iframe,
+ * where `prompt()` is ignored by the browser and returns undefined, so a dialog-based
+ * composer would be dead on arrival in the one client that matters.
+ *
+ * This test deliberately never sends the frame: the playground root lives inside THIS
+ * repository, so a real checkpoint would branch and commit the developer's own working copy.
+ * The final assertion is that no `writeback/*` ref appeared.
+ */
+test('the checkpoint composer opens inline and never opens a browser dialog (Feature D)', async ({ page }) => {
+  const original = readFileSync(APP, 'utf8')
+  const app = original.split('\n')
+  const line = app.findIndex((l) => l.includes('>Overview</a>'))
+  const loc = { file: 'src/App.tsx', line: line + 1, col: app[line].indexOf('<a') }
+  const branches = () =>
+    execFileSync('git', ['branch', '--list', 'writeback/*'], { cwd: join(__dirname, '..', '..', '..'), encoding: 'utf8' }).trim()
+  const before = branches()
+
+  await page.goto('http://127.0.0.1:7331/panel')
+  await expect(page.locator('.histhead')).toBeVisible()
+  const button = page.locator('#checkpoint')
+
+  try {
+    // a write is what a checkpoint is made of: until the session has one, the button is inert
+    await page.evaluate((l) => window.postMessage({ t: 'wb-select', loc: l, components: [], computed: {} }, '*'), loc)
+    await expect(page.locator('.tokens')).toBeVisible()
+    const padx = page.locator('.row').filter({ has: page.getByText('pad x', { exact: true }) })
+    await padx.locator('.stepper button').last().click()
+    await page.locator('#save').click()
+    await expect.poll(() => readFileSync(APP, 'utf8')).not.toBe(original)
+    await expect(button).toBeEnabled()
+
+    // the composer is real DOM in the panel, not a browser dialog
+    await button.click()
+    const box = page.locator('#ckedit')
+    await expect(box).toBeVisible()
+    await expect(box.locator('.tname')).toHaveText('CHECKPOINT → NEW BRANCH')
+    const input = box.locator('input')
+    await expect(input).toBeFocused()
+    await input.fill('tighten the nav')
+
+    // Escape abandons it — nothing sent, nothing committed
+    await input.press('Escape')
+    await expect(box).toBeHidden()
+    await expect(button).not.toHaveClass(/open/)
+
+    // the header button toggles its own composer, and ✕ closes it — still nothing sent
+    await button.click()
+    await expect(box).toBeVisible()
+    await button.click()
+    await expect(box).toBeHidden()
+    await button.click()
+    await box.locator('.btn.ghost').click()
+    await expect(box).toBeHidden()
+
+    await page.locator('.journal .e button').first().click()
+    await expect.poll(() => readFileSync(APP, 'utf8')).toBe(original)
+  } finally {
+    if (readFileSync(APP, 'utf8') !== original) writeFileSync(APP, original)
+  }
+  expect(branches()).toBe(before) // the composer never branched this repository
 })

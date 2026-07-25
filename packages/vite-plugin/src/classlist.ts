@@ -124,16 +124,69 @@ function buildToken(group: TwGroup, variants: string[], value: string): string {
   return `${chain}${prefix}-${value}`
 }
 
+/**
+ * The conflict-group identity of a variant chain. `hover:md:p-2` and `md:hover:p-2` compile to
+ * the SAME rule (same media query, same pseudo-class), so they are one conflict group — comparing
+ * the chains as ordered strings would treat them as two and blind-append a competing token, which
+ * is exactly what the never-blind-append rule exists to prevent. Order-insensitive by sorting;
+ * duplicated segments collapse too (`hover:hover:` is the `hover:` group).
+ */
+export const chainKey = (variants: string[]): string => [...new Set(variants)].sort().join(':')
+/** same identity, from an already-joined chain string ('' = base) */
+export const chainKeyOf = (chain: string): string => chainKey(chain ? chain.split(':') : [])
+const sameChain = (p: ParsedToken, key: string) => chainKey(p.variants) === key
+
+/**
+ * Characters a class token may contain. Everything a JSX string/template literal could be
+ * broken out of — quotes, backticks, braces, `$`, backslash, whitespace — is absent by
+ * construction, so a spliced token can never grow an attribute, an event handler, or a live
+ * `${…}` expression. Reparse-verify only proves the FILE parses; this is what proves the edit
+ * stayed inside the literal. Applied to the whole built token, variant prefixes included.
+ */
+const TOKEN_CHARS = /^[A-Za-z0-9_@:/.[\]#%(),!*+&<>=?|~^-]+$/
+export const validToken = (token: string): boolean => token.length <= 200 && TOKEN_CHARS.test(token)
+/** the token an edit would emit is the thing to validate — variants and value both ride in it */
+export const validTokenEdit = (edit: { group: TwGroup; variants: string[]; value: string }): boolean =>
+  edit.variants.every((v) => !!v && validToken(v) && !v.includes(':')) && validToken(buildToken(edit.group, edit.variants, edit.value))
+
+type Piece = { tok: string; gap: string }
+/**
+ * Tokens plus the EXACT whitespace around them. A `className` written across several lines is
+ * a formatting choice the user made; rebuilding the list with single spaces would reflow lines
+ * the edit never touched (and fight their formatter), so every surviving token keeps its own
+ * separator.
+ */
+function pieces(classes: string): { lead: string; items: Piece[] } {
+  const items: Piece[] = []
+  let lead = ''
+  let last = 0
+  for (const m of classes.matchAll(/\S+/g)) {
+    if (!items.length) lead = classes.slice(0, m.index!)
+    else items[items.length - 1].gap = classes.slice(last, m.index!)
+    items.push({ tok: m[0], gap: '' })
+    last = m.index! + m[0].length
+  }
+  if (items.length) items[items.length - 1].gap = classes.slice(last)
+  else lead = classes
+  return { lead, items }
+}
+const joinPieces = (lead: string, items: Piece[]) => lead + items.map((i) => i.tok + i.gap).join('')
+
+/** drop items[i], handing its trailing whitespace to the token before it (so the list keeps its shape) */
+function dropAt(items: Piece[], i: number) {
+  if (i === items.length - 1 && i > 0) items[i - 1].gap = items[i].gap
+  items.splice(i, 1)
+}
+
 /** Remove every token belonging to (group, variant-chain) — used to clear conflicting duplicates. */
 export function removeTokenGroup(classes: string, group: TwGroup, chain: string): string {
-  return classes
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((tok) => {
-      const p = parseToken(tok)
-      return !(p && p.group === group && p.variants.join(':') === chain)
-    })
-    .join(' ')
+  const { lead, items } = pieces(classes)
+  const key = chainKeyOf(chain)
+  for (let i = items.length - 1; i >= 0; i--) {
+    const p = parseToken(items[i].tok)
+    if (p && p.group === group && sameChain(p, key)) dropAt(items, i)
+  }
+  return joinPieces(items.length ? lead : '', items)
 }
 
 export function applyTokenEdit(
@@ -141,20 +194,24 @@ export function applyTokenEdit(
   edit: { group: TwGroup; variants: string[]; value: string },
 ): string {
   const newToken = buildToken(edit.group, edit.variants, edit.value)
-  const chain = edit.variants.join(':')
-  const tokens = classes.split(/\s+/).filter(Boolean)
-  let replaced = false
-  const out: string[] = []
-  for (const tok of tokens) {
-    const parsed = parseToken(tok)
-    if (parsed && parsed.group === edit.group && parsed.variants.join(':') === chain) {
-      if (!replaced) {
-        out.push(newToken)
-        replaced = true
-      }
-      // duplicates in the same group are dropped
-    } else out.push(tok)
+  const key = chainKey(edit.variants)
+  const { lead, items } = pieces(classes)
+  const hits: number[] = []
+  items.forEach((it, i) => {
+    const p = parseToken(it.tok)
+    if (p && p.group === edit.group && sameChain(p, key)) hits.push(i)
+  })
+  if (hits.length) {
+    items[hits[0]].tok = newToken // replaced in place, keeping its position and separators
+    for (const i of hits.slice(1).reverse()) dropAt(items, i) // duplicates in the same group are dropped
+  } else {
+    // append: reuse the separator BETWEEN the last two tokens, so a multi-line list stays multi-line
+    const sep = items.length > 1 ? items[items.length - 2].gap : ' '
+    if (items.length) {
+      const trail = items[items.length - 1].gap
+      items[items.length - 1].gap = sep
+      items.push({ tok: newToken, gap: trail })
+    } else return newToken
   }
-  if (!replaced) out.push(newToken)
-  return out.join(' ')
+  return joinPieces(lead, items)
 }

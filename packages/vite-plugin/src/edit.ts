@@ -1,8 +1,8 @@
 import MagicString from 'magic-string'
 import { createHash } from 'node:crypto'
-import type { Loc, TwGroup, TwOp } from '@writeback/protocol'
+import type { Loc, TextOp, TwGroup, TwOp } from '@writeback/protocol'
 import { parseJsx, walk } from './tag.ts'
-import { applyTokenEdit, parseToken, removeTokenGroup, tokenGroups } from './classlist.ts'
+import { applyTokenEdit, chainKey, parseToken, removeTokenGroup, tokenGroups, validTokenEdit } from './classlist.ts'
 import { componentInfoIn, infoOf, type CompInfo } from './attribute.ts'
 
 export function hashOf(content: string): string {
@@ -387,10 +387,51 @@ function lockedGroups(locked: string[]): TwGroup[] {
   return [...new Set(locked.flatMap(tokenGroups))]
 }
 
+/**
+ * The element's editable text range: exactly one static JSXText child (whitespace-only
+ * siblings ignored), or an empty non-self-closing element (insertion point between the
+ * tags). Mixed children, expressions, and nested elements are not safely editable → null.
+ * Offsets bound the TRIMMED core so surrounding indentation/newlines survive the splice.
+ */
+function textRangeOf(ast: any, opening: any, source: string): { start: number; end: number; text: string } | null {
+  if (opening.selfClosing) return null
+  let parent: any = null
+  walk(ast.program, (n) => {
+    if (n.type === 'JSXElement' && n.openingElement === opening) parent = n
+  })
+  if (!parent?.closingElement) return null
+  const kids = parent.children.filter((c: any) => !(c.type === 'JSXText' && !c.value.trim()))
+  if (kids.length === 0) return { start: opening.end, end: parent.closingElement.start, text: '' }
+  if (kids.length !== 1 || kids[0].type !== 'JSXText') return null
+  const child = kids[0]
+  // raw source slice, never babel's cooked .value — entities (&amp;) must survive display
+  const raw = source.slice(child.start, child.end)
+  const lead = raw.match(/^\s*/)![0].length
+  const trail = raw.length === lead ? 0 : raw.match(/\s*$/)![0].length
+  return { start: child.start + lead, end: child.end - trail, text: source.slice(child.start + lead, child.end - trail) }
+}
+
+/** resolve-time text extraction — works even when the className refuses (text isn't dynamic). */
+function textAt(source: string, loc: Loc): string | undefined {
+  let ast
+  try {
+    ast = parseJsx(source)
+  } catch {
+    return undefined
+  }
+  const node = findElement(ast, loc)
+  if (!node) return undefined
+  return textRangeOf(ast, node, source)?.text
+}
+
 export function resolveLoc(source: string, loc: Loc, host?: EditHost) {
   const r = locate(source, loc, host)
-  if (r === null) return { classes: null, reason: 'computed-classname' as const } // stale loc / not found
-  if (!r.ok) return { classes: null, reason: r.reason, loc: r.loc }
+  if (r === null) return { classes: null, reason: 'computed-classname' as const, loc: undefined } // stale loc / not found
+  // text is editable independently of the className: a computed class doesn't make the
+  // element's TEXT dynamic, so a refused element can still offer a text edit.
+  const text = textAt(source, loc)
+  const textExtra = text !== undefined ? { text } : {}
+  if (!r.ok) return { classes: null, reason: r.reason, loc: r.loc, ...textExtra }
   const classes = r.segments.flatMap((s) => s.raw.split(/\s+/).filter(Boolean))
   // Feature 1: groups a conditional branch owns are readable but NOT editable. Surfaced
   // here so the refusal is loud at RESOLVE time — a client that hides these controls
@@ -399,12 +440,45 @@ export function resolveLoc(source: string, loc: Loc, host?: EditHost) {
   const extra = locked.length ? { locked } : {}
   // when the editable source lives in another file (cross-file cva), surface it so the
   // caller hashes / addresses the DEFINITION file, not the call site.
-  if (r.editFile !== loc.file) return { classes, loc: r.loc, editFile: r.editFile, editSource: r.editSource, ...extra }
-  return { classes, loc: r.loc, ...extra }
+  if (r.editFile !== loc.file) return { classes, loc: r.loc, editFile: r.editFile, editSource: r.editSource, ...extra, ...textExtra }
+  return { classes, loc: r.loc, ...extra, ...textExtra }
+}
+
+/**
+ * Text write-back. Same discipline as class edits: parse → locate the exact element →
+ * splice only the text range → reparse-verify, abort on failure. Values JSX can't hold
+ * as plain text ({ } < >, meaningful leading/trailing whitespace, newlines) are written
+ * as a {"…"} expression, so ANY string round-trips without corrupting the file.
+ */
+export function applyTextEdit(source: string, loc: Loc, op: TextOp, relPath: string, _host?: EditHost): EditResult {
+  let ast
+  try {
+    ast = parseJsx(source)
+  } catch {
+    return { ok: false, reason: 'parse-error' }
+  }
+  const node = findElement(ast, loc)
+  if (!node) return { ok: false, reason: 'unknown-edit' }
+  const t = textRangeOf(ast, node, source)
+  if (!t) return { ok: false, reason: 'unknown-edit' }
+  const needsExpr = /[{}<>]/.test(op.value) || /^\s|\s$/.test(op.value) || op.value.includes('\n')
+  const insert = needsExpr ? `{${JSON.stringify(op.value)}}` : op.value
+  const s = new MagicString(source)
+  if (t.start !== t.end) s.overwrite(t.start, t.end, insert)
+  else if (insert) s.appendLeft(t.start, insert)
+  const code = s.toString()
+  try {
+    parseJsx(code) // reparse-verify: never write a broken file
+  } catch {
+    return { ok: false, reason: 'parse-error' }
+  }
+  const matched: Loc = { file: loc.file, line: node.loc.start.line, col: node.loc.start.column }
+  return { ok: true, code, diff: unifiedDiff(relPath, source, code), file: relPath, preSource: source, loc: matched }
 }
 
 // ponytail: single-hunk unified diff — every edit touches exactly one attribute value
-function unifiedDiff(file: string, before: string, after: string): string {
+// (exported for src/token.ts, whose @theme edits touch exactly one declaration value)
+export function unifiedDiff(file: string, before: string, after: string): string {
   const a = before.split('\n')
   const b = after.split('\n')
   let start = 0
@@ -449,9 +523,12 @@ export type EditResult =
       warn?: string
     }
   // 'not-forwarded'/'unknown-edit' only ever come out of the component-usage paths
-  | { ok: false; reason: 'computed-classname' | 'parse-error' | 'not-forwarded' | 'unknown-edit' | 'locked-group' }
+  | { ok: false; reason: 'computed-classname' | 'parse-error' | 'not-forwarded' | 'unknown-edit' | 'locked-group' | 'off-scale' }
 
 export function applyEdit(source: string, loc: Loc, op: TwOp, relPath: string, host?: EditHost): EditResult {
+  // a token that could carry quotes/braces/`${}`/whitespace would splice OUT of the string
+  // literal and into live JSX — reparse-verify can't see that, so it never reaches the splice
+  if (!validTokenEdit(op)) return { ok: false, reason: 'off-scale' }
   const r = locate(source, loc, host)
   if (r === null || !r.ok) return { ok: false, reason: 'computed-classname' }
   const editSource = r.editSource
@@ -459,8 +536,10 @@ export function applyEdit(source: string, loc: Loc, op: TwOp, relPath: string, h
 
   // pick the segment holding a member of the target group — the LAST one, since for
   // cva the variant slot (later segment) is the intended owner over the base; fall
-  // back to the first (base) segment for new groups
-  const chain = op.variants.join(':')
+  // back to the first (base) segment for new groups.
+  // `chain` is the ORDER-INSENSITIVE identity of the variant chain (see chainKey): a
+  // reordered-but-equivalent chain is the same conflict group, never a second one.
+  const chain = chainKey(op.variants)
 
   // Feature 1: refuse if the target group appears in a read-only conditional branch —
   // whichever way the branch resolves at runtime would fight our static edit. Groups an
@@ -482,7 +561,7 @@ export function applyEdit(source: string, loc: Loc, op: TwOp, relPath: string, h
     [...r.segments].reverse().find((s) =>
       s.raw.split(/\s+/).some((tok) => {
         const p = parseToken(tok)
-        return p && p.group === op.group && p.variants.join(':') === chain
+        return p && p.group === op.group && chainKey(p.variants) === chain
       }),
     ) ?? r.segments[0]
 
@@ -611,12 +690,12 @@ function callSiteGate(
   const info = localComponentInfo(ast, source, file, name, host, 2)
   if (info?.forwards !== true) return { ok: false }
   if (info.merges) return { ok: true } // tailwind-merge settles the conflict at runtime
-  const chain = op.variants.join(':')
+  const chain = chainKey(op.variants)
   // never blind-append: a class of the same group already on the component's root is a
   // real conflict, and with no merge helper STYLESHEET order picks the winner, not us.
   const clash = info.tokens.find((tok) => {
     const p = parseToken(tok)
-    return p && p.group === op.group && p.variants.join(':') === chain
+    return p && p.group === op.group && chainKey(p.variants) === chain
   })
   return clash
     ? { ok: true, warn: `<${name}> already sets \`${clash}\` and does not merge classes — stylesheet order decides which wins` }
@@ -635,6 +714,39 @@ function staticAttrRange(attr: any): { start: number; end: number } | null {
     }
   }
   return null // clsx/cva/props/etc — an instance edit must not reach into a computed value
+}
+
+/**
+ * Feature B: the class tokens on the element's OWN className attribute, read with exactly
+ * the rules `applyCallSiteEdit` writes by. `resolveLoc` answers a different question —
+ * what the element RENDERS — and for `<Card className={card()} />` that is the cva
+ * DEFINITION's class list in another file, which a per-instance edit never touches. A
+ * client offering call-site editing needs THIS list or it would show classes its edits
+ * can't reach (and controls whose writes would refuse).
+ *
+ * `null` when the element at `loc` is not a plain PascalCase component usage — the only
+ * shape `target:'callsite'` accepts. Otherwise:
+ *   no className attribute        → `{ classes: [] }` (editable: the write appends one)
+ *   static string / bare template → `{ classes: [...tokens] }`
+ *   anything computed             → `{ classes: null }` (a call-site edit refuses)
+ */
+export function ownClassesAt(source: string, loc: Loc): { classes: string[] | null } | null {
+  let ast
+  try {
+    ast = parseJsx(source)
+  } catch {
+    return null
+  }
+  const node = findElement(ast, loc)
+  if (!node) return null
+  const name = node.name
+  if (name.type !== 'JSXIdentifier' || !/^[A-Z]/.test(name.name)) return null
+  const attr = node.attributes.find((a: any) => a.type === 'JSXAttribute' && a.name.name === 'className')
+  if (!attr) return { classes: [] }
+  const range = staticAttrRange(attr)
+  if (!range) return { classes: null }
+  // raw slice, never babel's cooked .value — same discipline as locate()
+  return { classes: source.slice(range.start, range.end).split(/\s+/).filter(Boolean) }
 }
 
 /**
@@ -660,6 +772,9 @@ export function applyCallSiteEdit(
   _relPath: string,
   host?: EditHost,
 ): EditResult {
+  // same charset gate as applyEdit — this path also builds a fresh `className="…"` attribute,
+  // where an unvalidated token would be splicing raw text into the opening tag
+  if (!validTokenEdit(op)) return { ok: false, reason: 'off-scale' }
   let ast
   try {
     ast = parseJsx(source)

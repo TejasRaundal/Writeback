@@ -1,19 +1,24 @@
 import { createServer } from 'node:http'
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMsg, ServerMsg, Loc } from '@writeback/protocol'
 import { BRIDGE_PORT } from '@writeback/protocol'
-import { resolveLoc, applyEdit, applyCallSiteEdit, hashOf } from './edit.ts'
+import { resolveLoc, applyEdit, applyCallSiteEdit, applyTextEdit, ownClassesAt, hashOf } from './edit.ts'
 import { makeEditHost } from './imports.ts'
 import { getScale } from './theme.ts'
+import { applyThemeTokenEdit, themeTokenIndex } from './token.ts'
+import { validTokenEdit } from './classlist.ts'
 import { callSiteHints, cvaBlast, forwardsClassName } from './attribute.ts'
 
 type JournalEntry = { id: string; file: string; preHash: string; postHash: string; pre: string; diff: string }
 
 export function startBridge(root: string, port = BRIDGE_PORT) {
-  const scale = getScale(root)
+  // not const: a `token` edit moves the design system itself, so the scale every later
+  // off-scale check and `config` reply is measured against must be re-read (Feature C)
+  let scale = getScale(root)
   const journalDir = join(root, '.writeback')
   const journalPath = join(journalDir, 'journal.jsonl')
   const journal = new Map<string, JournalEntry>()
@@ -30,9 +35,22 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
   }
 
   // loc.file is root-relative (or absolute); keep writes inside root
+  const realOf = (p: string) => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return null // doesn't exist yet — the lexical check below is the whole answer
+    }
+  }
+  const realRoot = realOf(resolve(root)) ?? resolve(root)
   const safePath = (file: string): string | null => {
     const abs = resolve(root, file)
-    return abs.startsWith(resolve(root) + sep) ? abs : null
+    if (!abs.startsWith(resolve(root) + sep)) return null
+    // `resolve` normalises `..`, but a SYMLINK inside the project still points wherever it
+    // likes and writeFileSync follows it — confinement has to be checked on the real path
+    const real = realOf(abs)
+    if (real && real !== realRoot && !real.startsWith(realRoot + sep)) return null
+    return abs
   }
   const rootPosix = resolve(root).replace(/\\/g, '/')
 
@@ -55,7 +73,11 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
   // Only the axes the bridge holds authoritatively (spacing, colors) are checked;
   // arbitrary [..] values require raw:true.
   const SPACING_GROUPS = new Set(['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'm', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'gap', 'gap-x', 'gap-y'])
-  const offScale = (op: { group: string; value: string; raw?: boolean }): boolean => {
+  const offScale = (op: { group: string; value: string; variants?: string[]; raw?: boolean }): boolean => {
+    // charset first, and for EVERY group: `raw` is an escape hatch from the design SCALE,
+    // never from "a class token is a class token" (see validTokenEdit). Refused before any
+    // file is read, so an injected value never reaches a splice on any path.
+    if (!validTokenEdit({ group: op.group as any, variants: op.variants ?? [], value: op.value })) return true
     if (op.raw || op.value.startsWith('[')) return op.value.startsWith('[') && !op.raw // bracketed needs raw
     if (SPACING_GROUPS.has(op.group)) {
       const v = op.value.startsWith('-') ? op.value.slice(1) : op.value
@@ -66,15 +88,30 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
     return false // remaining typography/appearance: fixed Tailwind enums chosen by the client, not enforced here
   }
 
+  // every git call goes through here: always in the project root, always time-boxed, and a
+  // throw (git missing entirely) is just a failed command — never an exception up the stack.
+  const git = (args: string[], opts: { input?: string; index?: string } = {}): { status: number | null; stdout: string } => {
+    try {
+      return spawnSync('git', args, {
+        cwd: root, encoding: 'utf8', timeout: 10_000, input: opts.input,
+        // a checkpoint stages into a THROWAWAY index file, so the user's real .git/index —
+        // and therefore everything their own `git add`/`git status` sees — is never touched
+        env: opts.index ? { ...process.env, GIT_INDEX_FILE: opts.index } : process.env,
+      })
+    } catch {
+      return { status: 1, stdout: '' }
+    }
+  }
+  const gitOut = (args: string[], opts?: { input?: string; index?: string }): string | null => {
+    const r = git(args, opts)
+    return r.status === 0 ? r.stdout.trim() : null
+  }
+
   // git guardrail: does this file have uncommitted changes we didn't make?
   const gitDirty = (file: string): boolean => {
-    try {
-      const r = spawnSync('git', ['status', '--porcelain', '--', file], { cwd: root, encoding: 'utf8', timeout: 3000 })
-      if (r.status !== 0 || !r.stdout.trim()) return false
-      return ![...journal.values()].some((e) => e.file === file) // our own edits don't count
-    } catch {
-      return false
-    }
+    const out = gitOut(['status', '--porcelain', '--', file])
+    if (!out) return false
+    return ![...journal.values()].some((e) => e.file === file) // our own edits don't count
   }
 
   const exportMarkdown = (): string => {
@@ -83,6 +120,66 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
       lines.push(`## ${e.file}`, '', '```diff', e.diff, '```', '')
     }
     return lines.join('\n')
+  }
+
+  /**
+   * Feature D — checkpoint. Snapshot the session's writes onto a new branch WITHOUT touching
+   * the user's working state. The whole safety argument is in which commands are used:
+   * `git branch` (creates a ref, never moves HEAD), and plumbing — read-tree / update-index /
+   * write-tree / commit-tree / update-ref — driven against a temporary GIT_INDEX_FILE.
+   * No checkout, no reset, no stash, no `git add`, nothing that can write the working tree.
+   * Only journal-touched files are staged, so a manual edit sitting in the tree stays there
+   * and stays uncommitted. Any failure is a refusal with nothing left behind.
+   */
+  const doCheckpoint = (msg: Extract<ClientMsg, { t: 'checkpoint' }>, send: (m: ServerMsg) => void) => {
+    const noLoc: Loc = { file: '', line: 0, col: 0 }
+    const entries = [...journal.values()]
+    // a journalled file that has since been deleted is skipped rather than failing the batch
+    const files = [...new Set(entries.map((e) => e.file))].filter((f) => {
+      const abs = safePath(f)
+      return !!abs && existsSync(abs)
+    })
+    if (!files.length) {
+      send({ t: 'refused', id: msg.id, loc: noLoc, reason: 'unknown-edit' })
+      return
+    }
+    const head = gitOut(['rev-parse', '--verify', 'HEAD'])
+    if (!head) {
+      send({ t: 'refused', id: msg.id, loc: noLoc, reason: 'git-unavailable' })
+      return
+    }
+    const d = new Date()
+    const p2 = (n: number) => String(n).padStart(2, '0')
+    const base = `writeback/${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`
+    // two checkpoints inside one second must not collide (and must never clobber a ref)
+    let branch = base
+    for (let n = 2; n < 100 && gitOut(['rev-parse', '--verify', '--quiet', 'refs/heads/' + branch]); n++) branch = `${base}-${n}`
+    if (git(['branch', branch, head]).status !== 0) {
+      send({ t: 'refused', id: msg.id, loc: noLoc, reason: 'git-unavailable' })
+      return
+    }
+    const idxDir = mkdtempSync(join(tmpdir(), 'wb-ckpt-'))
+    const index = join(idxDir, 'index')
+    try {
+      let commit: string | null = null
+      if (git(['read-tree', head], { index }).status === 0 && git(['update-index', '--add', '--', ...files], { index }).status === 0) {
+        const tree = gitOut(['write-tree'], { index })
+        if (tree) {
+          const subject = msg.message?.trim() || `writeback: ${entries.length} edit${entries.length === 1 ? '' : 's'}`
+          // -F - : the body is the session changelog, which contains anything a diff can —
+          // never shell-quote it onto a command line
+          commit = gitOut(['commit-tree', tree, '-p', head, '-F', '-'], { index, input: subject + '\n\n' + exportMarkdown() })
+        }
+      }
+      if (!commit || git(['update-ref', 'refs/heads/' + branch, commit]).status !== 0) {
+        git(['branch', '-D', branch]) // leave no half-made ref behind
+        send({ t: 'refused', id: msg.id, loc: noLoc, reason: 'git-unavailable' })
+        return
+      }
+      send({ t: 'checkpointed', id: msg.id, branch, commit })
+    } finally {
+      rmSync(idxDir, { recursive: true, force: true })
+    }
   }
 
   const http = createServer((req, res) => {
@@ -163,14 +260,19 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
 
   const wss = new WebSocketServer({ server: http })
 
-  // Any webpage can attempt ws://127.0.0.1 — reject browser origins we don't know.
-  // Non-browser clients (no Origin header) are the local user, not a CSRF vector.
-  const originOk = (origin: string | undefined) => {
-    if (!origin) return true
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true
-    if (origin.startsWith('chrome-extension://')) return true
-    return false
-  }
+  /**
+   * Any webpage can attempt ws://127.0.0.1 — reject every browser origin but ONE: the panel,
+   * which the bridge itself serves at `/panel` and therefore runs on the bridge's own origin.
+   * "Any localhost port" was too wide by far: every other dev server, Storybook, docs site or
+   * coverage report the developer has open is a localhost page, and `token`/`checkpoint`/`undo`
+   * would have been a drive-by source rewrite from any of them. `chrome-extension://*` was
+   * wider still — a scheme, not an allowlist, admitting every installed extension. Writeback's
+   * own extension never opens the socket (it only pings `/health`, which is CORS-open and
+   * read-only) and iframes the panel, so it needs no origin of its own.
+   * Non-browser clients (no Origin header at all) are the local user — agents, curl, CI.
+   */
+  const selfOrigins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`])
+  const originOk = (origin: string | undefined) => !origin || selfOrigins.has(origin)
 
   const doEdit = (msg: Extract<ClientMsg, { t: 'edit' }>, send: (m: ServerMsg) => void) => {
     const abs = safePath(msg.loc.file)
@@ -178,14 +280,15 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
       send({ t: 'refused', id: msg.id, loc: msg.loc, reason: 'file-not-found' })
       return
     }
-    if (offScale(msg.op)) {
+    if (msg.op.kind === 'tw' && offScale(msg.op)) {
       send({ t: 'refused', id: msg.id, loc: msg.loc, reason: 'off-scale' })
       return
     }
     const source = readFileSync(abs, 'utf8')
-    // target:'callsite' (M4) edits the component USAGE at loc; default edits what it renders
-    const apply = msg.target === 'callsite' ? applyCallSiteEdit : applyEdit
-    const r = apply(source, msg.loc, msg.op, msg.loc.file, makeHost())
+    // text edits always touch the element's own file; target:'callsite' (M4) edits the
+    // component USAGE at loc; default edits what the element renders
+    const apply = msg.op.kind === 'text' ? applyTextEdit : msg.target === 'callsite' ? applyCallSiteEdit : applyEdit
+    const r = apply(source, msg.loc, msg.op as any, msg.loc.file, makeHost())
     if (!r.ok) {
       send({ t: 'refused', id: msg.id, loc: msg.loc, reason: r.reason })
       return
@@ -193,7 +296,14 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
     // hash-mismatch covers the file we WRITE (r.file) *and*, for a cross-file cva, the
     // call-site file that chose what to write — see lockHash.
     const sameFile = r.file === msg.loc.file
-    if (lockHash(source, r.preSource, sameFile) !== msg.hash) {
+    let hashOk = lockHash(source, r.preSource, sameFile) === msg.hash
+    // a text edit on a cross-file-cva element writes the CALL SITE, but resolve handed the
+    // client the composite lock (it covers class edits too) — accept that token as well
+    if (!hashOk && msg.op.kind === 'text') {
+      const rl: any = resolveLoc(source, msg.loc, makeHost())
+      if (rl.editSource) hashOk = lockHash(source, rl.editSource, false) === msg.hash
+    }
+    if (!hashOk) {
       send({ t: 'refused', id: msg.id, loc: msg.loc, reason: 'hash-mismatch' })
       return
     }
@@ -222,7 +332,12 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
       switch (msg.t) {
         case 'config':
           // include root so agents can build correct loc.file paths (relative to it, or absolute)
-          send({ t: 'config', spacing: scale.spacing, colors: scale.colors, fonts: scale.fonts, root: resolve(root).replace(/\\/g, '/') })
+          // `tokens` is re-scanned per request (it carries a per-file lock hash, which any
+          // manual CSS edit invalidates), while the scale is the one held since the last write
+          send({
+            t: 'config', spacing: scale.spacing, colors: scale.colors, fonts: scale.fonts,
+            root: resolve(root).replace(/\\/g, '/'), tokens: themeTokenIndex(root),
+          })
           break
         case 'resolve': {
           const abs = safePath(msg.loc.file)
@@ -254,6 +369,11 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
               if (hints.length) extras.hints = hints
             }
           }
+          // Feature B: a component USAGE also carries its OWN className — what target:'callsite'
+          // writes. `classes` above is what the element RENDERS (a cva definition's classes, in
+          // another file, for `<Card className={card()} />`), so a per-instance client needs both.
+          const own = ownClassesAt(source, mloc)
+          if (own) extras.own = own
           // dirtiness that matters is the file the edit will TOUCH (def file for a cross-file cva)
           if (gitDirty(editFile)) extras.dirty = true
           // name the file the edit would write when it is not loc.file, so the client can
@@ -261,6 +381,8 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
           if (editFile !== msg.loc.file) extras.editFile = editFile
           // Feature 1: groups a conditional branch owns — refuse them HERE, not only on write
           if ((r as any).locked) extras.locked = (r as any).locked
+          // single static JSXText child → the element's text is editable ({kind:'text'} op)
+          if ((r as any).text !== undefined) extras.text = (r as any).text
           // echo the element's REAL loc (may differ from the requested col when the
           // agent passed just a line) so the follow-up edit uses the exact position.
           const echoLoc = r.loc ?? msg.loc
@@ -274,6 +396,41 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
         case 'edit':
           doEdit(msg, send)
           break
+        case 'checkpoint':
+          doCheckpoint(msg, send)
+          break
+        case 'token': {
+          // Feature C: a DESIGN SYSTEM edit — one @theme declaration value, not an element.
+          // No `target`, no scale check (the token IS the scale) and no dry mode: the whole
+          // change is one value, and the journal entry undoes it like any other write.
+          const r = applyThemeTokenEdit(root, msg.name, msg.value)
+          if (!r.ok) {
+            send({ t: 'refused', id: msg.id, loc: { file: '', line: 0, col: 0 }, reason: r.reason })
+            break
+          }
+          const loc: Loc = { file: r.file, line: r.line, col: 0 }
+          // the lock is the declaring CSS file, handed out as config.tokens[name].hash — and it
+          // is REQUIRED here, unlike the wire type's original "optional". This one write moves
+          // the design system under every element in the project; an unlocked write means a
+          // client that never read `config` (or one that read it long ago) can still land it.
+          if (!msg.hash || hashOf(r.preSource) !== msg.hash) {
+            send({ t: 'refused', id: msg.id, loc, reason: 'hash-mismatch' })
+            break
+          }
+          const abs = safePath(r.file)
+          if (!abs) {
+            send({ t: 'refused', id: msg.id, loc, reason: 'file-not-found' })
+            break
+          }
+          const warn = gitDirty(r.file) ? 'file has uncommitted manual changes' : undefined
+          writeFileSync(abs, r.code)
+          const entry: JournalEntry = { id: msg.id, file: r.file, preHash: hashOf(r.preSource), postHash: hashOf(r.code), pre: r.preSource, diff: r.diff }
+          journal.set(msg.id, entry)
+          logJournal(entry)
+          scale = getScale(root) // the scale moved with the token — later config fetches report it
+          send({ t: 'edited', id: msg.id, loc, diff: r.diff, hash: hashOf(r.code), ...(warn ? { warn } : {}) })
+          break
+        }
         case 'bulk': {
           if (!Array.isArray(msg.edits) || msg.edits.length === 0) {
             send({ t: 'refused', id: msg.id, loc: { file: '', line: 0, col: 0 }, reason: 'unknown-edit' })
@@ -300,13 +457,13 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
               failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'file-not-found' }
               break
             }
-            if (offScale(e.op)) {
+            if (e.op.kind === 'tw' && offScale(e.op)) {
               failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'off-scale' }
               break
             }
             const source = staged.get(abs) ?? original(abs)
-            const apply = e.target === 'callsite' ? applyCallSiteEdit : applyEdit
-            const r = apply(source, e.loc, e.op, e.loc.file, makeHost(staged))
+            const apply = e.op.kind === 'text' ? applyTextEdit : e.target === 'callsite' ? applyCallSiteEdit : applyEdit
+            const r = apply(source, e.loc, e.op as any, e.loc.file, makeHost(staged))
             if (!r.ok) {
               failed = { t: 'refused', id: msg.id, loc: e.loc, reason: r.reason }
               break
@@ -319,7 +476,14 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
             // every edit is verified against the pre-batch content of BOTH files it depends
             // on (see lockHash) — being the second edit into an already-staged file is not
             // an excuse to skip the check
-            if (lockHash(original(abs), original(targetAbs), targetAbs === abs) !== e.hash) {
+            let hashOk = lockHash(original(abs), original(targetAbs), targetAbs === abs) === e.hash
+            // same composite-lock acceptance as doEdit: a text edit on a cross-file-cva
+            // element carries the resolve-time composite token, not the plain file hash
+            if (!hashOk && e.op.kind === 'text') {
+              const rl: any = resolveLoc(original(abs), e.loc, makeHost())
+              if (rl.editSource) hashOk = lockHash(original(abs), rl.editSource, false) === e.hash
+            }
+            if (!hashOk) {
               failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'hash-mismatch' }
               break
             }
@@ -361,6 +525,8 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
             logJournal({ undoOf: entry.id })
             reverted++
           }
+          // undoing a token edit puts the old value back — the scale has to follow it back too
+          if (reverted && entries.some((e) => e.file.endsWith('.css'))) scale = getScale(root)
           const loc: Loc = { file: entries[0].file, line: 0, col: 0 }
           if (reverted) send({ t: 'edited', id: msg.id, loc, diff: '' })
           else send({ t: 'refused', id: msg.id, loc, reason: 'hash-mismatch' })

@@ -61,6 +61,9 @@
   .hset .iconbtn + .iconbtn { border-left: 1px solid var(--line); }
   .iconbtn:hover { background: var(--inset); color: var(--fg); }
   .iconbtn.on { color: var(--amber); background: var(--amber-bg); }
+  /* an open composer, not a mode: teal, because nothing is armed or drifting yet */
+  .iconbtn.open { color: var(--acc); background: var(--acc-soft); }
+  .iconbtn:disabled { opacity: .4; cursor: default; background: transparent; color: var(--dim); }
   .iconbtn sup { font-size: 8px; margin-left: 2px; }
   header a.iconbtn { text-decoration: none; font-size: 11px; display: inline-flex; align-items: center; }
 
@@ -93,6 +96,25 @@
   .srcline a:hover { border-color: var(--acc-line); color: var(--fg); }
   .srcline a .ln { color: var(--acc); }
   .srcline a .go { color: var(--faint); font-size: 9px; }
+  /* per-instance (call-site) mode — every control below targets this ONE usage's className */
+  .modepill { display: flex; align-items: center; gap: 7px; margin-top: 7px; padding: 3px 4px 3px 9px; border-radius: 7px;
+    background: var(--acc-soft); box-shadow: inset 0 0 0 1px var(--acc-line); font-size: 11px; }
+  .modepill .mk { color: var(--acc); font-weight: 650; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
+  .modepill .at { color: var(--faint); }
+  .modepill .loc { color: var(--dim); font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10.5px; }
+  .modepill .exit { margin-left: auto; flex: none; height: 20px; padding: 0 8px; border: none; border-radius: 5px;
+    background: transparent; box-shadow: inset 0 0 0 1px var(--acc-line); color: var(--acc); font-size: 10.5px; cursor: pointer; }
+  .modepill .exit:hover { background: var(--panel); }
+  /* variant-chain selector — scopes every control below it to hover:/focus:/dark:/md:/lg: */
+  .variants { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 9px; }
+  .vchip { display: inline-flex; align-items: center; gap: 4px; padding: 2.5px 8px; border-radius: 5px; cursor: pointer;
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10px;
+    background: var(--well); border: none; box-shadow: inset 0 0 0 1px var(--line2); color: var(--dim); }
+  .vchip:hover { color: var(--fg); box-shadow: inset 0 0 0 1px var(--acc-line); }
+  .vchip.on { background: var(--acc-soft); box-shadow: inset 0 0 0 1px var(--acc); color: var(--acc); font-weight: 650; cursor: default; }
+  .vchip i { width: 4px; height: 4px; border-radius: 50%; background: var(--acc); flex: none; }
+  .vhint { margin-top: 7px; font-size: 10.5px; color: var(--faint); }
   .tokens { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 12px; }
   .tk { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10.5px; padding: 2.5px 7px; border-radius: 5px;
     background: var(--chip); box-shadow: inset 0 0 0 1px var(--chip-line); border: none; color: var(--dim); }
@@ -128,6 +150,12 @@
   .hints a:hover { background: var(--inset); color: var(--fg); }
   .hints a .cmp { color: var(--fg); font-weight: 600; }
   .hints a .loc { color: var(--acc); }
+  /* one call site + its "edit only this instance" switch (must follow `.hints a` to win) */
+  .instrow { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .instrow a { flex: 1; min-width: 0; margin-right: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .instbtn { flex: none; height: 22px; padding: 0 9px; border: none; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--acc);
+    background: transparent; color: var(--acc); font-size: 11px; cursor: pointer; white-space: nowrap; }
+  .instbtn:hover { background: var(--acc-soft); }
 
   section { border-bottom: 1px solid var(--line); }
   section h2 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 11px 14px 7px; cursor: pointer; user-select: none;
@@ -144,6 +172,9 @@
   .row { display: flex; align-items: center; gap: 10px; min-height: 30px; position: relative; }
   .row label { width: 62px; flex: none; color: var(--dim); font-size: 12px; }
   .row.staged label { color: var(--acc); font-weight: 600; }
+  /* a group a runtime condition owns: readable, never editable (the server refuses it) */
+  .row.locked, .colorblock.locked .swatches, .colorblock.locked .customrow { opacity: .45; }
+  .row.locked *, .colorblock.locked .sw { cursor: not-allowed; }
   .row.staged::before { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px; width: 2px; border-radius: 2px; background: var(--acc); }
 
   .stepper { display: flex; align-items: stretch; height: 29px; margin-left: auto;
@@ -168,6 +199,11 @@
     cursor: pointer; font-size: 14px; line-height: 1; transition: color .12s, box-shadow .12s; }
   .revert:hover { color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
 
+  .textinput { flex: 1; height: 29px; padding: 0 10px; border: none; border-radius: 8px; background: var(--well);
+    box-shadow: inset 0 0 0 1px var(--line2), inset 0 1.5px 3px rgba(0,0,0,.05); font-size: 12px;
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
+  .textinput:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--acc), 0 0 10px var(--acc-glow); }
+  .row.staged .textinput { box-shadow: inset 0 0 0 1.5px var(--acc), 0 0 10px var(--acc-glow); }
   select { margin-left: auto; height: 29px; padding: 0 8px; border: none; box-shadow: inset 0 0 0 1px var(--line2);
     border-radius: 7px; background: var(--well); font-size: 12px; cursor: pointer; }
   input[type=range] { flex: 1; accent-color: var(--acc); height: 29px; margin: 0; }
@@ -183,12 +219,41 @@
   .contrast { font-size: 11px; color: var(--dim); margin: 3px 0; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
   .contrast b.pass { color: var(--add); } .contrast b.fail { color: var(--del); }
   .swatches { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin: 6px 0 4px; max-height: 118px; overflow-y: auto; padding: 3px; }
-  .sw { aspect-ratio: 1; border-radius: 5px; border: none; box-shadow: inset 0 0 0 1px rgba(127,127,127,.28); cursor: pointer; padding: 0; transition: transform .08s; }
+  .swcell { position: relative; display: block; }
+  .sw { width: 100%; aspect-ratio: 1; border-radius: 5px; border: none; box-shadow: inset 0 0 0 1px rgba(127,127,127,.28); cursor: pointer; padding: 0; transition: transform .08s; }
   .sw:hover { transform: scale(1.25); box-shadow: inset 0 0 0 1px var(--fg); position: relative; z-index: 1; }
   .sw:focus-visible { transform: scale(1.25); position: relative; z-index: 1; }
   .sw.sel { outline: 2px solid var(--acc); outline-offset: 2px; }
   .sw.fail { opacity: .14; pointer-events: none; }
   .colorblock + .colorblock { border-top: 1px solid var(--line); margin-top: 9px; padding-top: 8px; }
+  /* ── @theme design tokens ── a swatch/font that IS a project token can have its VALUE
+     rewritten in the project CSS. That is not an element edit, so it never enters the write
+     rail: amber (the "this is bigger than one file" colour) + an explicit confirm step. */
+  .swcell.istok .sw { box-shadow: inset 0 0 0 1.5px var(--amber); }
+  .swpen { position: absolute; right: -3px; bottom: -3px; z-index: 2; width: 13px; height: 13px; padding: 0;
+    display: grid; place-items: center; border: none; border-radius: 4px; cursor: pointer;
+    background: var(--panel); box-shadow: inset 0 0 0 1px var(--amber-line); color: var(--amber); font-size: 8px; line-height: 1; }
+  .swpen:hover { background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber); }
+  .tokbtn { flex: none; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; cursor: pointer;
+    border: none; border-radius: 7px; background: transparent; box-shadow: inset 0 0 0 1px var(--amber-line);
+    color: var(--amber); font-size: 12px; line-height: 1; }
+  .tokbtn:hover { background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber); }
+  .tokedit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 7px 0 2px; padding: 8px 9px;
+    border-radius: 8px; background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber-line); }
+  .tokedit .tname { width: 100%; font-family: "Cascadia Code", ui-monospace, Consolas, monospace;
+    font-size: 10px; font-weight: 650; letter-spacing: .06em; color: var(--amber); }
+  .tokedit .textinput { flex: 1 1 120px; min-width: 0; background: var(--panel); }
+  .tokedit .btn { height: 27px; padding: 0 10px; font-size: 11.5px; }
+  .tokedit .warn { width: 100%; font-size: 11px; line-height: 1.5; color: var(--amber); }
+  /* checkpoint composer (Feature D) — the header button opens it here, beside the History
+     whose entries it commits. Teal, not amber: unlike a token edit this changes NOTHING
+     the user can see — no file, no working tree, no branch — it only adds a ref. */
+  .ckedit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; padding: 8px 9px;
+    border-radius: 8px; background: var(--acc-soft); box-shadow: inset 0 0 0 1px var(--acc-line); }
+  .ckedit[hidden] { display: none; } /* a class `display` outranks the UA rule for [hidden] */
+  .ckedit .tname { width: 100%; font-size: 10px; font-weight: 650; letter-spacing: .06em; color: var(--acc); }
+  .ckedit .textinput { flex: 1 1 120px; min-width: 0; background: var(--panel); }
+  .ckedit .btn { height: 27px; padding: 0 10px; font-size: 11.5px; }
   .customrow { display: flex; gap: 6px; margin-top: 5px; }
   .custom { flex: 1; height: 28px; padding: 0 9px; border: 1px dashed var(--amber-line); background: transparent;
     color: var(--amber); border-radius: 7px; font-size: 11.5px; }
@@ -272,6 +337,7 @@
   <span class="hset">
     <button class="iconbtn" id="driftToggle" title="Drift radar — outline off-scale values" aria-label="Toggle drift radar">◇</button>
     <a class="iconbtn" href="/export" target="_blank" title="Session changelog" aria-label="Export session changelog">export</a>
+    <button class="iconbtn" id="checkpoint" title="Commit this session's edits to a new branch — your branch and working tree are untouched" aria-label="Checkpoint this session to a branch" disabled>checkpoint</button>
     <button class="iconbtn" id="themeToggle" title="Switch theme" aria-label="Switch to dark theme">☾</button>
   </span>
 </header>
@@ -319,6 +385,7 @@
   <div class="tools" id="tools" hidden>
     <button class="btn" id="copy">Copy styles</button><button class="btn" id="paste" disabled>Paste</button>
   </div>
+  <div class="ckedit" id="ckedit" hidden></div>
   <div class="journal" id="journal"></div>
 </footer>
 
@@ -342,6 +409,55 @@ $('themeToggle').onclick = () => {
 }
 $('driftToggle').onclick = () => parent.postMessage({ t: 'wb-drift-toggle' }, '*')
 
+// ── checkpoint (Feature D) ──
+// Snapshots the session's written files onto a new branch. It is NOT a staged edit: nothing
+// about the working tree or the current branch changes, so it needs no rail and no dry-run —
+// only the optional commit subject. Enabled by the journal: no writes, nothing to checkpoint.
+// The subject is asked for INLINE, never with prompt(): the panel is a cross-origin iframe
+// (127.0.0.1:7331 inside the app's origin), where Chrome ignores prompt() and returns
+// undefined — the dialog would silently never appear for the one client that matters.
+let checkpointId = null
+$('checkpoint').onclick = () => {
+  if ($('checkpoint').disabled || checkpointId) return
+  if (!$('ckedit').hidden) { closeCheckpoint(); return } // the button toggles its own composer
+  openCheckpoint()
+}
+function closeCheckpoint() {
+  $('ckedit').hidden = true
+  $('ckedit').innerHTML = ''
+  $('checkpoint').classList.remove('open')
+}
+function openCheckpoint() {
+  const box = $('ckedit')
+  box.innerHTML = ''
+  box.hidden = false
+  $('checkpoint').classList.add('open')
+  box.appendChild(el('span', 'tname', 'CHECKPOINT → NEW BRANCH'))
+  const inp = el('input', 'textinput')
+  inp.type = 'text'
+  inp.placeholder = 'Commit subject (optional)'
+  inp.setAttribute('aria-label', 'Checkpoint commit message (optional)')
+  const go = () => {
+    if (checkpointId) return
+    checkpointId = crypto.randomUUID()
+    const message = inp.value.trim()
+    send({ t: 'checkpoint', id: checkpointId, ...(message ? { message } : {}) })
+    closeCheckpoint()
+  }
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); go() }
+    if (e.key === 'Escape') { e.preventDefault(); closeCheckpoint() }
+  }
+  const b = el('button', 'btn', 'Checkpoint')
+  b.title = 'Commit the session’s edits to a new branch — your branch and working tree stay as they are'
+  b.onclick = go
+  const x = el('button', 'btn ghost', '✕')
+  x.title = 'Close'
+  x.onclick = closeCheckpoint
+  box.append(inp, b, x)
+  inp.focus()
+}
+
 // ── token scales (standard Tailwind sets; spacing/colors come from the project config) ──
 const SIZES = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl']
 const WEIGHTS = ['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black']
@@ -351,7 +467,11 @@ const LEADING = ['none', 'tight', 'snug', 'normal', 'relaxed', 'loose']
 const ROUNDED = ['none', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', '3xl', 'full']
 const SHADOWS = ['none', '2xs', 'xs', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', 'inner']
 const MANAGED = ['p', 'px', 'py', 'm', 'gap', 'bg', 'text', 'text-size', 'font-weight', 'font-family', 'tracking', 'leading', 'rounded', 'shadow', 'opacity']
+// variant chains the chip row offers. One chain is active at a time; it scopes every
+// control, so `hover:` edits stage and write independently of the base ones.
+const VARIANTS = ['hover', 'focus', 'dark', 'md', 'lg']
 const SECTION_GROUPS = {
+  Text: ['#text'],
   Spacing: ['p', 'px', 'py', 'm', 'gap'],
   Typography: ['text-size', 'font-weight', 'font-family', 'tracking', 'leading'],
   Colors: ['text', 'bg'],
@@ -394,11 +514,36 @@ function cssFor(group, v) {
 let ws = null, retry = null
 let config = { spacing: [], colors: {} }
 let sel = null, multi = []
-let draft = {}          // group -> staged value, not yet written to source
+let draft = {}          // draft KEY -> staged value, not yet written to source.
+                        // key = chain-qualified group: 'bg' (base) vs 'hover:bg' — so base and
+                        // hover edits of the same property stage side by side. '#text' has no chain.
+let chain = []          // active variant chain ([] = base); scopes every control
 let clipboard = null
 const send = (m) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)) }
-const previewStyle = (style) => parent.postMessage({ t: 'wb-preview', style }, '*')
+// every preview carries the staged text too, so hovering a swatch doesn't flicker the label back
+const previewStyle = (style) => parent.postMessage({ t: 'wb-preview', style, text: draft['#text'] }, '*')
 const previewClear = () => parent.postMessage({ t: 'wb-preview-clear' }, '*')
+
+// ── variant chains ──
+// Split a class token on ':' but not inside [brackets] — mirrors the engine's splitVariants,
+// so `bg-[url(a:b)]` is one token with no variants.
+function splitVariants(token) {
+  const parts = []
+  let depth = 0, cur = ''
+  for (const ch of token) {
+    if (ch === '[') depth++
+    else if (ch === ']') depth--
+    if (ch === ':' && depth === 0) { parts.push(cur); cur = '' } else cur += ch
+  }
+  parts.push(cur)
+  return parts
+}
+const chainOfToken = (cls) => splitVariants(cls).slice(0, -1).join(':')
+const chainStr = (ch) => ch.join(':')
+// draft key ↔ (chain, group). No group or variant name contains ':', so the last ':' splits them.
+const keyFor = (group, ch = chain) => (ch.length ? ch.join(':') + ':' : '') + group
+const groupOf = (key) => key.slice(key.lastIndexOf(':') + 1)
+const chainOf = (key) => { const i = key.lastIndexOf(':'); return i < 0 ? [] : key.slice(0, i).split(':') }
 
 function connect() {
   ws = new WebSocket('ws://127.0.0.1:7331')
@@ -423,8 +568,10 @@ const clamp = (i, list) => Math.min(list.length - 1, Math.max(0, i))
 window.addEventListener('message', (e) => {
   const d = e.data
   if (d?.t === 'wb-select') {
-    if (d.add && sel) { multi.push({ loc: d.loc, hash: null, classes: null }); send({ t: 'resolve', loc: d.loc }) }
-    else { sel = { loc: d.loc, components: d.components || [], computed: d.computed || {} }; multi = []; draft = {}; invalidateReview(); send({ t: 'resolve', loc: sel.loc }) }
+    // multi-select is a definition-mode affordance: a per-instance draft addresses ONE
+    // usage, so an add-click leaves instance mode rather than silently widening its blast radius
+    if (d.add && sel && !sel.instanceOf) { multi.push({ loc: d.loc, hash: null, classes: null }); send({ t: 'resolve', loc: d.loc }) }
+    else { sel = { loc: d.loc, components: d.components || [], computed: d.computed || {} }; multi = []; draft = {}; chain = []; tokenEdit = null; invalidateReview(); send({ t: 'resolve', loc: sel.loc }) }
   }
   if (d?.t === 'wb-nudge' && sel?.classes) {
     const cur = valueOf(d.group)
@@ -432,7 +579,7 @@ window.addEventListener('message', (e) => {
     const next = config.spacing[clamp((i < 0 ? config.spacing.indexOf('4') : i) + d.dir, config.spacing)]
     if (next !== undefined) stage(d.group, next)
   }
-  if (d?.t === 'wb-deselect') { sel = null; multi = []; draft = {}; invalidateReview(); previewClear(); showEmpty() }
+  if (d?.t === 'wb-deselect') { sel = null; multi = []; draft = {}; chain = []; tokenEdit = null; invalidateReview(); previewClear(); showEmpty() }
   if (d?.t === 'wb-drift-state') {
     $('driftToggle').classList.toggle('on', !!d.on)
     $('driftToggle').innerHTML = d.on && d.count ? '◇<sup>' + d.count + '</sup>' : '◇'
@@ -444,22 +591,79 @@ window.addEventListener('message', (e) => {
 
 function onMessage(e) {
   const m = JSON.parse(e.data)
-  if (m.t === 'config') config = m
+  // config carries the design scale AND the editable @theme token list — after a token write
+  // it is re-requested, so re-render to pick up the new value (and the new lock hash)
+  if (m.t === 'config') { config = m; if (sel) rerender() }
+  // a token edit is its own transaction: it must not touch the element write queue or the rail
+  if ((m.t === 'edited' || m.t === 'refused') && tokenSends.has(m.id)) {
+    const pending = tokenSends.get(m.id)
+    tokenSends.delete(m.id)
+    if (m.t === 'refused') {
+      toast(`${pending.name} not changed: ` + m.reason.replace(/-/g, ' '))
+      // the value the user typed is not theirs to lose on a refusal — the commonest reason
+      // (a stale lock hash) is recovered by re-sending the SAME value after config refreshes
+      tokenEdit = pending.edit
+      tokenEdit.confirm = false
+    } else if (m.warn) toast(m.warn)
+    else toast('Updated ' + pending.name, true)
+    send({ t: 'config' }); send({ t: 'journal' })
+    if (sel) rerender()
+    return
+  }
+  // a checkpoint is its own transaction too — its refusal must not flush the write queue
+  if ((m.t === 'checkpointed' || m.t === 'refused') && m.id === checkpointId) {
+    checkpointId = null
+    if (m.t === 'refused') toast(m.reason === 'unknown-edit' ? 'Nothing to checkpoint yet' : 'Checkpoint failed: ' + m.reason.replace(/-/g, ' '))
+    else toast('Checkpoint → ' + m.branch, true)
+    return
+  }
   if (m.t === 'resolved') {
     const extra = multi.find((x) => sameLoc(x.loc, m.loc))
-    if (extra) { extra.hash = m.hash; extra.classes = m.classes; render(); afterResolve(); return }
-    if (!sel || !sameLoc(sel.loc, m.loc)) return
-    Object.assign(sel, { hash: m.hash, classes: m.classes, blast: m.blast, hints: m.hints, dirty: m.dirty, instance: m.instance, reason: m.reason, locked: m.locked })
-    render(); afterResolve()
+    if (extra) { extra.hash = m.hash; extra.classes = m.classes; afterResolve(); render(); return }
+    // a re-resolve whose element is no longer selected (the user moved on mid-write) still
+    // has to be COUNTED, or `busy` never returns to false and every button goes dead
+    if (!sel || !sameLoc(sel.loc, m.loc)) { afterResolve(); return }
+    if (sel.instanceOf) {
+      // per-instance mode: the controls must reflect the USAGE's OWN className, which is
+      // what target:'callsite' writes. `classes` answers a different question (what the
+      // element renders — for `className={card()}` that's a cva definition in another file).
+      const own = m.own || { classes: null }
+      Object.assign(sel, {
+        hash: m.hash, classes: own.classes, dirty: m.dirty,
+        // no className yet is not a refusal here: the call-site write appends the attribute
+        reason: own.classes === null ? 'computed-classname' : undefined,
+        blast: undefined, hints: undefined, instance: undefined, locked: undefined, text: undefined,
+      })
+    } else {
+      Object.assign(sel, { hash: m.hash, classes: m.classes, blast: m.blast, hints: m.hints, dirty: m.dirty, instance: m.instance, reason: m.reason, locked: m.locked, text: m.text })
+    }
+    // afterResolve FIRST: a finished write clears the draft there, and rendering before that
+    // would paint every written change as still pending (old → new wells, staged rows)
+    afterResolve(); render()
   }
+  // dry-run replies are matched by id: a review that was abandoned (one of its ops refused)
+  // must not be completed by the replies still in flight from it
   if (m.t === 'edited' && m.dry) {
+    if (!dryIds.has(m.id)) return
+    dryIds.delete(m.id)
     if (m.diff) dryDiffs.push(m.diff)
-    if (--dryPending <= 0) finishReview()
+    if (!dryIds.size) finishReview()
+    return
+  }
+  // a refused op inside a review: the preview would be a LIE (it would show only the ops that
+  // passed, while Write applies the whole draft), so the whole review is abandoned
+  if (m.t === 'refused' && dryIds.has(m.id)) {
+    dryIds.clear()
+    invalidateReview()
+    toast('Review stopped — ' + m.reason.replace(/-/g, ' ') + ' (nothing was written)')
     return
   }
   if (m.t === 'edited' && !m.dry) {
     if (m.warn) toast(m.warn)
     send({ t: 'journal' })
+    // an undone (or written) .css file is a DESIGN SYSTEM change — the scale, the swatches and
+    // the token lock hashes all moved, and only `config` carries them
+    if (m.loc?.file?.endsWith('.css')) send({ t: 'config' })
     pendingResolves = reresolveLocs.length || 1
     ;(reresolveLocs.length ? reresolveLocs : [sel?.loc]).filter(Boolean).forEach((l) => send({ t: 'resolve', loc: l }))
     reresolveLocs = []
@@ -467,7 +671,7 @@ function onMessage(e) {
   if (m.t === 'refused') {
     toast('Edit refused: ' + m.reason.replace(/-/g, ' '))
     editQueue.length = 0; reresolveLocs = []; saving = false
-    dryPending = 0; dryDiffs = []; reviewing = false
+    dryIds.clear(); dryDiffs = []; reviewing = false
     if (sel) { busy = true; pendingResolves = 1; send({ t: 'resolve', loc: sel.loc }) } else busy = false
   }
   if (m.t === 'journal') renderJournal(m.entries)
@@ -484,9 +688,13 @@ function afterResolve() {
 // ── staging ──
 // Controls never touch source directly — they stage a value and preview it live.
 // Review shows the server dry-run diff; Write commits the whole draft; Discard restores.
+// a group owned by a read-only conditional branch (`cond ? 'bg-a' : 'bg-b'`) is refused by the
+// server for EVERY variant chain — staging it would promise a write that is guaranteed to fail
+const isLockedGroup = (group) => !!sel?.locked?.includes(group)
 function stage(group, value) {
   if (!sel || sel.classes === null) return
-  draft[group] = value
+  if (isLockedGroup(group)) { toast(`${group} is set by a runtime condition here — Writeback won’t fight it`); return }
+  draft[keyFor(group)] = value   // staged under the ACTIVE chain
   invalidateReview()
   applyPreview()
   const st = $('scroll').scrollTop
@@ -494,35 +702,75 @@ function stage(group, value) {
   $('scroll').scrollTop = st
 }
 
+// Live preview only ever shows BASE-chain edits: a `hover:`/`dark:`/`md:` class can't be
+// faithfully faked with an inline style (it depends on state/media the page owns), and a
+// wrong preview is worse than none. Non-base drafts are announced with a hint line instead.
 function draftStyle() {
   const style = {}
-  for (const [g, v] of Object.entries(draft)) {
-    for (const [k, val] of Object.entries(cssFor(g, v))) if (val != null) style[k] = val
+  for (const [key, v] of Object.entries(draft)) {
+    if (chainOf(key).length) continue
+    for (const [k, val] of Object.entries(cssFor(groupOf(key), v))) if (val != null) style[k] = val
   }
   return style
 }
+// hover-preview for a control in the active chain — nothing to show off the base chain
+const hoverPreview = (css) => { if (chain.length || !css) return; previewStyle({ ...draftStyle(), ...css }) }
 function applyPreview() {
   const s = draftStyle()
-  if (Object.keys(s).length) previewStyle(s)
+  if (Object.keys(s).length || '#text' in draft) previewStyle(s) // text rides along on previewStyle
   else previewClear()
   updateRail()
 }
 
-// token as it will be written for a staged group (mirror of the server's buildToken for display)
-function tokenFor(g, v) {
-  return g === 'text-size' ? 'text-' + v : g === 'font-weight' || g === 'font-family' ? 'font-' + v : v === 'DEFAULT' ? g : `${g}-${v}`
+// token as it will be written for a staged key, variant prefix included
+// (mirror of the server's buildToken for display)
+function tokenFor(key, v) {
+  const g = groupOf(key), ch = chainOf(key)
+  const base = g === 'text-size' ? 'text-' + v : g === 'font-weight' || g === 'font-family' ? 'font-' + v : v === 'DEFAULT' ? g : `${g}-${v}`
+  return (ch.length ? ch.join(':') + ':' : '') + base
 }
-// source token currently owning a group on the selected element (for the − side of a diff line)
-function sourceTokenIn(classes, group) {
+// ── per-instance (call-site) mode ──
+// Editing ONE `<Badge className="…">` usage instead of the Badge component. Entered from a
+// call-site hint on a component that forwards className; every edit/dry-run made here goes
+// out with target:'callsite', and the controls read the usage's own className (resolved.own).
+function enterInstance(hint) {
+  const back = { loc: sel.loc, components: sel.components, computed: sel.computed }
+  sel = { loc: hint.loc, components: [hint.component], computed: sel.computed, instanceOf: { component: hint.component, back } }
+  multi = []; draft = {}; chain = []; tokenEdit = null
+  invalidateReview(); previewClear()
+  send({ t: 'resolve', loc: hint.loc })
+}
+function exitInstance() {
+  const back = sel?.instanceOf?.back
+  if (!back) return
+  sel = { loc: back.loc, components: back.components, computed: back.computed }
+  multi = []; draft = {}; chain = []; tokenEdit = null
+  invalidateReview(); previewClear()
+  send({ t: 'resolve', loc: sel.loc })
+}
+// the edit's addressing mode — in instance mode `loc` is a component USAGE, not the
+// element it renders, and only target:'callsite' writes the usage's own attribute
+const editTarget = () => (sel?.instanceOf ? { target: 'callsite' } : {})
+
+// the wire op for a staged key — '#text' is the text-content edit, everything else a class
+const opFor = (key, value) => key === '#text'
+  ? { kind: 'text', value }
+  : { kind: 'tw', group: groupOf(key), variants: chainOf(key), value, raw: value.startsWith('[') }
+const trunc = (s, n = 22) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+// source token currently owning (group, chain) on the selected element (the − side of a diff line)
+function sourceTokenIn(classes, group, want = '') {
   if (!classes) return null
-  for (const c of classes) if (matchGroup(c, group) !== null) return c
+  for (const c of classes) if (matchGroup(c, group, want) !== null) return c
   return null
 }
 
 // ── the write rail ──
-let reviewing = false, dryPending = 0, dryDiffs = []
+// the ids of the dry-runs this review is still waiting on — a Set, not a counter: a counter
+// went NEGATIVE when a refusal zeroed it and the remaining replies kept decrementing, which
+// left the Review button permanently inert
+let reviewing = false, dryIds = new Set(), dryDiffs = []
 function invalidateReview() {
-  reviewing = false; dryPending = 0; dryDiffs = []
+  reviewing = false; dryIds.clear(); dryDiffs = []
   $('dryrun').hidden = true
   $('drypre').innerHTML = ''
 }
@@ -532,13 +780,13 @@ function updateRail() {
   if (!n) { invalidateReview(); return }
   $('railn').textContent = `${n} change${n > 1 ? 's' : ''} · ${multi.length ? (multi.length + 1) + ' elements' : '1 file'}`
   const box = $('diffs'); box.innerHTML = ''
-  for (const [g, v] of Object.entries(draft)) {
+  for (const [key, v] of Object.entries(draft)) {
     const line = el('div', 'dl')
     line.appendChild(el('span', 'g', String(sel?.loc.line ?? '')))
-    const old = sourceTokenIn(sel?.classes, g)
+    const old = key === '#text' ? (sel?.text ? '“' + trunc(sel.text) + '”' : null) : sourceTokenIn(sel?.classes, groupOf(key), chainOf(key).join(':'))
     if (old) line.appendChild(el('span', 'del', '− ' + old))
-    line.appendChild(el('span', 'add', '+ ' + tokenFor(g, v)))
-    const x = el('button', 'x', '✕'); x.title = 'Discard this change'; x.onclick = () => unstage(g)
+    line.appendChild(el('span', 'add', '+ ' + (key === '#text' ? '“' + trunc(v) + '”' : tokenFor(key, v))))
+    const x = el('button', 'x', '✕'); x.title = 'Discard this change'; x.onclick = () => unstage(key)
     line.appendChild(x)
     box.appendChild(line)
   }
@@ -548,12 +796,13 @@ function updateRail() {
 }
 
 $('review').onclick = () => {
-  if (!sel || !Object.keys(draft).length || busy || dryPending) return
-  dryDiffs = []; dryPending = Object.keys(draft).length
-  for (const [group, value] of Object.entries(draft)) {
-    const op = { kind: 'tw', group, variants: [], value, raw: value.startsWith('[') }
-    send({ t: 'edit', id: crypto.randomUUID(), loc: sel.loc, hash: sel.hash, op, dry: true })
-  }
+  if (!sel || !Object.keys(draft).length || busy || dryIds.size) return
+  dryDiffs = []; dryIds.clear()
+  const ids = Object.keys(draft).map(() => crypto.randomUUID())
+  ids.forEach((id) => dryIds.add(id))
+  Object.entries(draft).forEach(([key, value], i) => {
+    send({ t: 'edit', id: ids[i], loc: sel.loc, hash: sel.hash, op: opFor(key, value), dry: true, ...editTarget() })
+  })
 }
 function finishReview() {
   reviewing = true
@@ -567,13 +816,13 @@ function finishReview() {
 }
 
 function rerender() { const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st }
-// un-stage a single property, keeping the rest of the draft
-function unstage(group) { delete draft[group]; invalidateReview(); applyPreview(); rerender() }
+// un-stage a single property (in one chain), keeping the rest of the draft
+function unstage(key) { delete draft[key]; invalidateReview(); applyPreview(); rerender() }
 $('reset').onclick = () => { draft = {}; invalidateReview(); previewClear(); rerender(); updateRail() }
 $('save').onclick = () => {
   if (!Object.keys(draft).length || busy) return
   saving = true
-  for (const [group, value] of Object.entries(draft)) editQueue.push({ group, value })
+  for (const [key, value] of Object.entries(draft)) editQueue.push({ key, value })
   pump()
 }
 document.addEventListener('keydown', (e) => {
@@ -598,33 +847,42 @@ let busy = false, pendingResolves = 0, reresolveLocs = [], saving = false
 
 function pump() {
   if (busy || !sel || !editQueue.length) return
-  const { group, value } = editQueue.shift()
+  const { key, value } = editQueue.shift()
   // bracketed custom values are the explicit off-scale escape hatch → raw
-  const op = { kind: 'tw', group, variants: [], value, raw: value.startsWith('[') }
+  const op = opFor(key, value)
   if (multi.length && multi.every((x) => x.hash)) {
     busy = true; reresolveLocs = [sel.loc, ...multi.map((x) => x.loc)]
     send({ t: 'bulk', id: crypto.randomUUID(), edits: [sel, ...multi].map((s) => ({ loc: s.loc, hash: s.hash ?? sel.hash, op })) })
     return
   }
   busy = true; reresolveLocs = [sel.loc]
-  send({ t: 'edit', id: crypto.randomUUID(), loc: sel.loc, hash: sel.hash, op })
+  send({ t: 'edit', id: crypto.randomUUID(), loc: sel.loc, hash: sel.hash, op, ...editTarget() })
 }
 
 $('copy').onclick = () => {
   if (!sel?.classes) return
-  clipboard = sel.classes.filter((c) => MANAGED.some((g) => matchGroup(c, g) !== null))
+  // variant tokens travel too — each pastes back into its OWN chain, not the active one
+  clipboard = sel.classes.filter((c) => MANAGED.some((g) => matchGroup(c, g, chainOfToken(c)) !== null))
   $('paste').disabled = !clipboard?.length
 }
 $('paste').onclick = () => {
   if (!clipboard) return
-  for (const tok of clipboard) for (const g of MANAGED) { const v = matchGroup(tok, g); if (v !== null) { draft[g] = v; break } }
+  for (const tok of clipboard) {
+    const tch = chainOfToken(tok)
+    // locked groups are skipped rather than pasted: the whole write would refuse otherwise
+    for (const g of MANAGED) { const v = matchGroup(tok, g, tch); if (v !== null) { if (!isLockedGroup(g)) draft[keyFor(g, tch ? tch.split(':') : [])] = v; break } }
+  }
   invalidateReview(); applyPreview(); const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st
 }
 
-function matchGroup(cls, group) {
-  if (cls.includes(':')) return null
-  const neg = cls.startsWith('-')
-  const base = neg ? cls.slice(1) : cls
+// `chain` is the variant chain the token must carry ('' = base, 'hover', 'md:hover', …) —
+// a token from another chain is a different conflict group entirely and never matches.
+function matchGroup(cls, group, want = '') {
+  const parts = splitVariants(cls)
+  if (parts.slice(0, -1).join(':') !== want) return null
+  const bare = parts[parts.length - 1]
+  const neg = bare.startsWith('-')
+  const base = neg ? bare.slice(1) : bare
   switch (group) {
     case 'text-size': { const m = base.match(/^text-(.+)$/); return m && SIZES.includes(m[1]) ? m[1] : null }
     case 'font-weight': { const m = base.match(/^font-(.+)$/); return m && WEIGHTS.includes(m[1]) ? m[1] : null }
@@ -644,29 +902,36 @@ function matchGroup(cls, group) {
   return neg ? '-' + rest : rest
 }
 
-// source value for a group (ignoring draft) — used to detect multi-select disagreement
-function sourceValueIn(classes, group) {
+// source value for a group within a chain (ignoring draft) — also detects multi-select disagreement
+function sourceValueIn(classes, group, want = '') {
   if (!classes) return null
-  for (const c of classes) { const v = matchGroup(c, group); if (v !== null) return v }
+  for (const c of classes) { const v = matchGroup(c, group, want); if (v !== null) return v }
   return null
 }
-// displayed value: draft wins, then this element's source, else null
+// displayed value for the ACTIVE chain: draft wins, then this element's source, else null
 function valueOf(group) {
-  if (group in draft) return draft[group]
-  return sourceValueIn(sel.classes, group)
+  const key = keyFor(group)
+  if (key in draft) return draft[key]
+  return sourceValueIn(sel.classes, group, chainStr(chain))
 }
-const isStaged = (group) => group in draft
+const isStaged = (group) => keyFor(group) in draft
 // true when a multi-selection's elements disagree on this group's source value
 function isMixed(group) {
-  if (!multi.length || group in draft) return false
-  const base = sourceValueIn(sel.classes, group)
-  return multi.some((x) => x.classes && sourceValueIn(x.classes, group) !== base)
+  if (!multi.length || keyFor(group) in draft) return false
+  const base = sourceValueIn(sel.classes, group, chainStr(chain))
+  return multi.some((x) => x.classes && sourceValueIn(x.classes, group, chainStr(chain)) !== base)
 }
 
-function computedOf(group) { const v = sel.computed?.[group]; return v ? v.replace(/^0px$/, '0') : null }
+// the picker's computed styles describe the element's RESTING state — meaningless as a
+// fallback for hover:/dark:/md:, so off the base chain a group with no class reads "—"
+function computedOf(group) { if (chain.length) return null; const v = sel.computed?.[group]; return v ? v.replace(/^0px$/, '0') : null }
 
 function renderJournal(entries) {
   const j = $('journal')
+  // the journal IS the checkpoint's contents — empty journal, nothing to commit, and an
+  // open composer would be aimed at nothing (undo can empty it while it sits there)
+  $('checkpoint').disabled = !entries.length
+  if (!entries.length && !$('ckedit').hidden) closeCheckpoint()
   j.innerHTML = '<div class="histhead">History</div>'
   if (!entries.length) { j.innerHTML += '<div class="none">Saved edits appear here, each with undo.</div>'; return }
   for (const en of entries.slice(-8).reverse()) {
@@ -690,8 +955,94 @@ function luminance([r, g, b]) { const f = (c) => { c /= 255; return c <= 0.03928
 function contrast(c1, c2) { const a = rgbOf(c1), b = rgbOf(c2); if (!a || !b) return null; const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (l1 + 0.05) / (l2 + 0.05) }
 
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n }
+
+// ── @theme design tokens (Feature C) ──
+// A colour swatch or font family that came from the project's own @theme block is not just a
+// value, it is a TOKEN whose definition lives in a CSS file we can rewrite. That edit is
+// categorically different from a class edit: it changes every utility built on the token, in
+// every file, and the panel cannot count them. So it never joins the write rail's staged
+// draft — it is its own explicitly-confirmed action, sent as {t:'token'} and journalled
+// server-side like any other write (so History undoes it).
+let tokenEdit = null         // { name, value, host, confirm } — the one open inline editor
+const tokenSends = new Map() // in-flight token edit id -> token name
+
+const tokenName = (kind, v) => '--' + kind + '-' + v
+// a value is editable only if the SERVER listed it in config.tokens — that list is exactly
+// the set of declarations it would accept a write for, so no control can offer a doomed edit
+const tokenInfo = (kind, v) => (v && config.tokens && config.tokens[tokenName(kind, v)]) || null
+const tokenValue = (kind, v) => (kind === 'color' ? config.colors[v] : (config.fonts || {})[v]) || ''
+// toggling is per (token, CONTROL): the same token has a ✎ in both colour blocks, so keying
+// on the name alone made the second pen close the editor instead of moving it under itself
+function openToken(name, value, host) {
+  tokenEdit = tokenEdit && tokenEdit.name === name && tokenEdit.host === host ? null : { name, value, host }
+  rerender()
+}
+// the ✎ affordance — `host` names the control it belongs to, so only that one shows the
+// editor; `cls` is `swpen` for the badge pinned to a swatch, `tokbtn` for a control row
+function tokenBtn(kind, v, host, cls = 'tokbtn') {
+  const name = tokenName(kind, v)
+  const b = el('button', cls, '✎')
+  b.title = `Edit the ${name} design token — changes every use of it`
+  b.setAttribute('aria-label', 'Edit design token ' + name)
+  b.onclick = (e) => { e.stopPropagation(); openToken(name, tokenValue(kind, v), host) }
+  return b
+}
+function sendToken() {
+  const te = tokenEdit
+  const id = crypto.randomUUID()
+  // the editor's state rides along, so a refusal can put it back with the typed value intact
+  tokenSends.set(id, { name: te.name, edit: te })
+  // hash locks the declaring CSS file — a manual edit since the last config fetch refuses
+  send({ t: 'token', id, name: te.name, value: te.value.trim(), hash: config.tokens?.[te.name]?.hash })
+  tokenEdit = null
+  rerender()
+}
+function tokenEditor() {
+  const te = tokenEdit
+  const box = el('div', 'tokedit')
+  // rebuilt in place (never through render()) so the input keeps focus, same as textRow()
+  const build = () => {
+    box.innerHTML = ''
+    const where = config.tokens?.[te.name]
+    box.appendChild(el('span', 'tname', te.name + (where ? ' · ' + where.file : '')))
+    if (te.confirm) {
+      box.appendChild(el('div', 'warn', `Changes every use of this token — the panel can’t count them. ${te.name} becomes ${te.value.trim()} across the project.`))
+      const go = el('button', 'btn', 'Apply to design system')
+      go.onclick = sendToken
+      const no = el('button', 'btn ghost', 'Cancel')
+      no.onclick = () => { te.confirm = false; build() }
+      box.append(go, no)
+    } else {
+      const inp = el('input', 'textinput mono')
+      inp.type = 'text'; inp.value = te.value
+      inp.setAttribute('aria-label', 'New value for ' + te.name)
+      const ask = () => { if (te.value.trim()) { te.confirm = true; build() } }
+      inp.oninput = () => { te.value = inp.value }
+      inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ask() } }
+      const save = el('button', 'btn', 'Save token…')
+      save.title = 'Review this design-system change before it is written'
+      save.onclick = ask
+      const x = el('button', 'btn ghost', '✕')
+      x.title = 'Close'
+      x.onclick = () => { tokenEdit = null; rerender() }
+      box.append(inp, save, x)
+    }
+  }
+  build()
+  return box
+}
 // small revert control shown on a staged row — resets just that one property
-function revertBtn(group) { const b = el('button', 'revert', '↺'); b.title = 'Reset this change'; b.onclick = (e) => { e.stopPropagation(); unstage(group) }; return b }
+function revertBtn(key) { const b = el('button', 'revert', '↺'); b.title = 'Reset this change'; b.onclick = (e) => { e.stopPropagation(); unstage(key) }; return b }
+
+// a control whose group is locked is shown, but inert: the value is still worth reading, the
+// edit is not offerable (see isLockedGroup)
+function markLocked(row, group) {
+  if (!isLockedGroup(group)) return row
+  row.classList.add('locked')
+  row.title = `${group} is decided by a runtime condition in this element’s className — edits to it are refused`
+  row.querySelectorAll('button, select, input').forEach((n) => { n.disabled = true })
+  return row
+}
 
 function stepperOver(group, label, list, opts = {}) {
   const cur = valueOf(group), staged = isStaged(group), mixed = isMixed(group)
@@ -706,7 +1057,7 @@ function stepperOver(group, label, list, opts = {}) {
   const mk = (txt, delta) => {
     const b = el('button', null, txt); b.title = (delta > 0 ? 'Increase ' : 'Decrease ') + label; b.onclick = () => step(delta)
     if (opts.previewCss) {
-      b.onmouseenter = () => { const i = list.indexOf(valueOf(group)); const nx = list[clamp((i < 0 ? (opts.startAt ?? 0) : i) + delta, list)]; const c = opts.previewCss(nx); if (c) previewStyle({ ...draftStyle(), ...c }) }
+      b.onmouseenter = () => { const i = list.indexOf(valueOf(group)); const nx = list[clamp((i < 0 ? (opts.startAt ?? 0) : i) + delta, list)]; hoverPreview(opts.previewCss(nx)) }
       b.onmouseleave = () => applyPreview()
     }
     return b
@@ -714,7 +1065,7 @@ function stepperOver(group, label, list, opts = {}) {
   const v = el('span', 'val num')
   if (staged) {
     // staged wells show the pending change inline: old → new
-    const from = sourceValueIn(sel.classes, group)
+    const from = sourceValueIn(sel.classes, group, chainStr(chain))
     const wrap = el('span')
     if (from !== null) wrap.appendChild(el('span', 'from', from === 'DEFAULT' ? 'base' : from))
     wrap.appendChild(el('span', 'to', cur === 'DEFAULT' ? 'base' : cur))
@@ -725,8 +1076,8 @@ function stepperOver(group, label, list, opts = {}) {
     if (cur === null && !mixed) { v.classList.add('unset'); v.title = 'Current computed value — no class sets this yet' }
   }
   box.append(mk('−', -1), v, mk('+', 1)); row.appendChild(box)
-  if (staged) row.appendChild(revertBtn(group))
-  return row
+  if (staged) row.appendChild(revertBtn(keyFor(group)))
+  return markLocked(row, group)
 }
 
 function selectOver(group, label, list) {
@@ -739,8 +1090,8 @@ function selectOver(group, label, list) {
   for (const v of list) { const o = el('option', null, v); o.value = v; if (v === cur) o.selected = true; s.appendChild(o) }
   s.onchange = () => { if (s.value) stage(group, s.value) }
   row.appendChild(s)
-  if (staged) row.appendChild(revertBtn(group))
-  return row
+  if (staged) row.appendChild(revertBtn(keyFor(group)))
+  return markLocked(row, group)
 }
 
 function sliderOver(group, label, max, step) {
@@ -749,11 +1100,45 @@ function sliderOver(group, label, max, step) {
   row.appendChild(el('label', null, label))
   const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = max; r.step = step; r.value = cur ?? computedOf(group) ?? max
   const v = el('span', 'rangeval mono num' + (cur === null ? ' dimval' : ''), cur ?? computedOf(group) ?? '—')
-  r.oninput = () => { v.textContent = r.value; previewStyle({ ...draftStyle(), opacity: String(Number(r.value) / 100) }) }
+  r.oninput = () => { v.textContent = r.value; hoverPreview({ opacity: String(Number(r.value) / 100) }) }
   r.onchange = () => stage(group, r.value)
   row.append(r, v)
-  if (staged) row.appendChild(revertBtn(group))
+  if (staged) row.appendChild(revertBtn(keyFor(group)))
+  return markLocked(row, group)
+}
+
+// text-content editor — bypasses stage()/render() per keystroke so the input keeps focus;
+// the draft/preview/rail plumbing is identical to a class edit ('#text' → {kind:'text'} op)
+// text content has no variant chain — its draft key is always the bare '#text'
+function textRow() {
+  const row = el('div', 'row' + ('#text' in draft ? ' staged' : ''))
+  const inp = el('input', 'textinput')
+  inp.type = 'text'
+  inp.value = draft['#text'] ?? sel.text
+  inp.placeholder = 'element text'
+  inp.setAttribute('aria-label', 'Element text')
+  inp.oninput = () => {
+    if (inp.value === sel.text) delete draft['#text']
+    else draft['#text'] = inp.value
+    row.classList.toggle('staged', '#text' in draft)
+    invalidateReview()
+    applyPreview()
+  }
+  row.appendChild(inp)
+  if ('#text' in draft) row.appendChild(revertBtn('#text'))
   return row
+}
+
+// the font family control, plus the @theme value editor when the chosen family is a project
+// token (a <select> can't hold a button, so the ✎ sits on the row beside it)
+function fontControl() {
+  const wrap = el('div')
+  const row = selectOver('font-family', 'font', Object.keys(config.fonts || {}))
+  const cur = valueOf('font-family')
+  if (tokenInfo('font', cur)) row.appendChild(tokenBtn('font', cur, 'font-family'))
+  wrap.appendChild(row)
+  if (tokenEdit && tokenEdit.host === 'font-family') wrap.appendChild(tokenEditor())
+  return wrap
 }
 
 // roving-tabindex color grid: one tab stop, arrows move focus
@@ -771,36 +1156,49 @@ function colorBlock(group, title) {
   else { const comp = computedOf(group); const dot = el('span', 'chipdot'); if (comp) dot.style.background = comp; head.append(dot, el('span', null, title + ' '), el('span', 'name dimval', comp ? 'computed' : 'not set')); if (comp) head.querySelector('.name').title = comp }
   let aaOnly = false
   if (pairCss) { const cb = el('button', 'pill', 'AA only'); cb.style.marginLeft = 'auto'; cb.title = 'Hide colors failing WCAG AA'; cb.onclick = () => { aaOnly = !aaOnly; cb.classList.toggle('on', aaOnly); paint() }; head.appendChild(cb) }
-  if (staged) { const rb = revertBtn(group); if (!pairCss) rb.style.marginLeft = 'auto'; head.appendChild(rb) }
+  if (staged) { const rb = revertBtn(keyFor(group)); if (!pairCss) rb.style.marginLeft = 'auto'; head.appendChild(rb) }
+  // the current colour is itself a project token → offer its VALUE for editing, right here
+  if (tokenInfo('color', curName)) { const tb = tokenBtn('color', curName, group); if (!pairCss && !staged) tb.style.marginLeft = 'auto'; head.appendChild(tb) }
   wrap.appendChild(head)
 
   if (pairCss && curName && config.colors[curName]) { const r = contrast(config.colors[curName], pairCss); if (r) { const c = el('div', 'contrast'); c.innerHTML = `contrast <b class="${r >= 4.5 ? 'pass' : 'fail'}">${r.toFixed(2)}</b> ${r >= 4.5 ? '· passes AA' : r >= 3 ? '· large text only' : '· fails AA'}`; wrap.appendChild(c) } }
 
+  const locked = isLockedGroup(group)
+  if (locked) { wrap.classList.add('locked'); wrap.title = `${group} is decided by a runtime condition in this element’s className — edits to it are refused` }
   const grid = el('div', 'swatches'); grid.setAttribute('role', 'listbox'); grid.setAttribute('aria-label', title + ' color')
   const names = Object.keys(config.colors)
   const paint = () => {
     grid.innerHTML = ''
     names.forEach((name, idx) => {
       const css = config.colors[name]
+      // a swatch that IS a project @theme token gets a ✎ badge: click the swatch to USE the
+      // colour here, click the badge to change what the token means everywhere
+      const info = tokenInfo('color', name)
+      const cell = el('span', 'swcell' + (info ? ' istok' : ''))
       const s = el('button', 'sw'); const r = pairCss ? contrast(css, pairCss) : null; const fails = aaOnly && r !== null && r < 4.5
       s.className = 'sw' + (name === curName ? ' sel' : '') + (fails ? ' fail' : '')
-      s.style.background = css; s.title = name + (r ? ` · ${r.toFixed(2)}` : ''); s.setAttribute('aria-label', name)
+      s.style.background = css; s.title = name + (r ? ` · ${r.toFixed(2)}` : '') + (info ? ' · project token' : ''); s.setAttribute('aria-label', name)
       s.tabIndex = idx === 0 ? 0 : -1
-      s.onmouseenter = () => previewStyle({ ...draftStyle(), ...cssFor(group, name) })
+      s.disabled = locked // a conditional branch owns this colour — the write would refuse
+      s.onmouseenter = () => hoverPreview(cssFor(group, name))
       s.onmouseleave = () => applyPreview()
       s.onclick = () => stage(group, name)
       s.onkeydown = (e) => {
-        const per = 14, cells = [...grid.children]; let ni = -1
+        const per = 14, cells = [...grid.querySelectorAll('.sw')]; let ni = -1
         if (e.key === 'ArrowRight') ni = idx + 1; else if (e.key === 'ArrowLeft') ni = idx - 1
         else if (e.key === 'ArrowDown') ni = idx + per; else if (e.key === 'ArrowUp') ni = idx - per
         else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stage(group, name); return }
         else return
         e.preventDefault(); const t = cells[ni]; if (t) { s.tabIndex = -1; t.tabIndex = 0; t.focus() }
       }
-      grid.appendChild(s)
+      cell.appendChild(s)
+      if (info) cell.appendChild(tokenBtn('color', name, group, 'swpen'))
+      grid.appendChild(cell)
     })
   }
   paint(); wrap.appendChild(grid)
+  // only the block whose control opened the editor renders it (text and bg are both colorBlocks)
+  if (tokenEdit && tokenEdit.host === group) wrap.appendChild(tokenEditor())
 
   const cr = el('div', 'customrow')
   const inp = el('input', 'custom mono'); inp.placeholder = 'custom, e.g. [#ff6600]'
@@ -813,31 +1211,90 @@ function colorBlock(group, title) {
   inp.oninput = () => inp.classList.remove('bad')
   inp.onkeydown = (e) => { if (e.key === 'Enter') commit() }
   apply.onclick = commit
+  inp.disabled = apply.disabled = locked
   cr.append(inp, apply); wrap.appendChild(cr)
   return wrap
 }
 
 const openSections = JSON.parse(localStorage.getItem('wb-sections') || '{"Spacing":true,"Typography":true,"Colors":true,"Appearance":false}')
 function makeSection(title, children) {
-  const s = el('section'); if (!openSections[title]) s.classList.add('closed')
+  const s = el('section'); if (openSections[title] === false) s.classList.add('closed') // unknown sections default open
   const h = el('h2'); h.append(el('span', 'chev', '▾'), el('span', null, title))
-  const stagedCount = (SECTION_GROUPS[title] || []).filter((g) => g in draft).length
+  // counts staged edits in EVERY chain, so a section with only a `hover:` edit still reads as staged
+  const stagedCount = Object.keys(draft).filter((k) => (SECTION_GROUPS[title] || []).includes(groupOf(k))).length
   if (stagedCount) h.appendChild(el('span', 'cnt', stagedCount + ' staged'))
-  h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0'); h.setAttribute('aria-expanded', String(!!openSections[title]))
+  h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0'); h.setAttribute('aria-expanded', String(openSections[title] !== false))
   const toggle = () => { s.classList.toggle('closed'); openSections[title] = !s.classList.contains('closed'); h.setAttribute('aria-expanded', String(openSections[title])); localStorage.setItem('wb-sections', JSON.stringify(openSections)) }
   h.onclick = toggle; h.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
   const body = el('div', 'body'); children.forEach((c) => body.appendChild(c)); s.append(h, body)
   return s
 }
 
+// Jumping to a call site is a SELECTION CHANGE, and every selection change clears the whole
+// per-selection state. Resetting only `draft` used to leave `multi` behind (the next Write
+// silently became a bulk onto an element the user could no longer see), plus a stale variant
+// chain and an open token editor belonging to the element just left.
+function jumpTo(hint) {
+  sel = { loc: hint.loc, components: [hint.component], computed: {} }
+  multi = []; draft = {}; chain = []; tokenEdit = null
+  invalidateReview(); previewClear()
+  send({ t: 'resolve', loc: hint.loc })
+}
 function jumpLink(hint) {
   const a = el('a')
   a.append(el('span', 'cmp', hint.component), el('span', 'loc', `${hint.loc.file}:${hint.loc.line}`))
-  a.onclick = () => { sel = { loc: hint.loc, components: [hint.component], computed: {} }; draft = {}; invalidateReview(); send({ t: 'resolve', loc: hint.loc }) }
+  a.onclick = () => jumpTo(hint)
   return a
 }
+// Feature B: the switch into per-instance mode, offered wherever a call-site hint is shown
+// (the refusal card for a `cn(base, className)` root, and the definition banner).
+function instanceBtn(hint) {
+  const go = el('button', 'instbtn', 'Edit only this instance')
+  go.title = `Edit this one <${hint.component}> usage’s className instead of the component`
+  go.onclick = () => enterInstance(hint)
+  return go
+}
 // compact inline variant for banners
-function jumpLinkInline(hint) { const a = el('a', 'mono', `${hint.component} · ${hint.loc.file}:${hint.loc.line}`); a.onclick = () => { sel = { loc: hint.loc, components: [hint.component], computed: {} }; draft = {}; invalidateReview(); send({ t: 'resolve', loc: hint.loc }) }; return a }
+function jumpLinkInline(hint) { const a = el('a', 'mono', `${hint.component} · ${hint.loc.file}:${hint.loc.line}`); a.onclick = () => jumpTo(hint); return a }
+
+// ── variant chip row ──
+// One chain active at a time; it scopes valueOf / staging / the tokens every control writes.
+function variantRow() {
+  const row = el('div', 'variants')
+  const chip = (label, ch) => {
+    const on = chainStr(chain) === chainStr(ch)
+    const b = el('button', 'vchip' + (on ? ' on' : ''), label)
+    b.title = ch.length ? `Edit the ${chainStr(ch)}: classes — every control below writes ${chainStr(ch)}:-prefixed tokens` : 'Edit the base (unprefixed) classes'
+    b.setAttribute('aria-pressed', String(on))
+    if (!on) b.onclick = () => setChain(ch)
+    // a dot marks a chain that already holds staged edits
+    if (Object.keys(draft).some((k) => k !== '#text' && chainStr(chainOf(k)) === chainStr(ch))) b.appendChild(el('i'))
+    return b
+  }
+  row.appendChild(chip('base', []))
+  for (const v of VARIANTS) row.appendChild(chip(v + ':', [v]))
+  return row
+}
+// the "you are editing one usage, not the component" marker + its way out
+function instancePill() {
+  const p = el('div', 'modepill')
+  p.append(
+    el('span', 'mk', 'instance edit'),
+    el('span', 'at', '·'),
+    el('span', 'loc', sel.loc.file.split('/').pop() + ':' + sel.loc.line),
+  )
+  const x = el('button', 'exit', 'back to component')
+  x.title = `Leave per-instance editing and edit the ${sel.instanceOf.component} component again`
+  x.onclick = exitInstance
+  p.appendChild(x)
+  return p
+}
+
+function setChain(ch) {
+  chain = ch
+  applyPreview() // preview follows the base-chain draft only — re-assert it on every switch
+  rerender()
+}
 
 function showEmpty() { $('crumb').innerHTML = EMPTY_STATE; $('content').innerHTML = ''; $('tools').hidden = true; updateRail() }
 
@@ -849,8 +1306,9 @@ function render() {
   const card = el('div', 'selcard')
   const cw = el('div', 'crumbwrap')
   const names = el('div', 'components')
-  const chain = sel.components.length ? sel.components : ['host element']
-  chain.forEach((n, i) => { if (i) names.appendChild(el('span', 'sep', '‹')); names.appendChild(el('span', i ? 'up' : null, n)) })
+  // NB: not `chain` — that is the module-level variant chain, which this must not shadow
+  const crumbs = sel.components.length ? sel.components : ['host element']
+  crumbs.forEach((n, i) => { if (i) names.appendChild(el('span', 'sep', '‹')); names.appendChild(el('span', i ? 'up' : null, n)) })
   if (multi.length) names.appendChild(el('span', 'plus', `+${multi.length} selected`))
   const src = el('div', 'srcline mono')
   const a = el('a'); a.title = 'Open in editor'
@@ -858,31 +1316,40 @@ function render() {
   a.append(el('span', null, fpath + ':'), el('span', 'ln', String(fline)), el('span', 'go', '↗'))
   a.onclick = () => send({ t: 'open', loc: sel.loc })
   src.appendChild(a)
-  cw.append(names, src); card.appendChild(cw)
+  cw.append(names, src)
+  if (sel.instanceOf) cw.appendChild(instancePill())
+  if (sel.classes !== null) {
+    cw.appendChild(variantRow())
+    if (chain.length) cw.appendChild(el('div', 'vhint', `editing ${chainStr(chain)}: — no live preview for this state; Review shows the exact diff`))
+  }
+  card.appendChild(cw)
 
   if (sel.classes !== null) {
     const strip = el('div', 'tokens')
     const stagedShown = new Set()
-    if (!sel.classes.length && !Object.keys(draft).length) strip.appendChild(el('span', 'none', 'no classes yet'))
+    if (!sel.classes.length && !Object.keys(draft).length) strip.appendChild(el('span', 'none', sel.instanceOf ? 'no classes yet — edits will add them' : 'no classes yet'))
     for (const t of sel.classes) {
-      // a token whose group is staged renders as a before→after capsule
-      const g = MANAGED.find((gr) => matchGroup(t, gr) !== null && gr in draft)
-      if (g) {
-        stagedShown.add(g)
+      // each token is matched inside ITS OWN chain, so `hover:bg-*` pairs with a `hover:bg` draft
+      const tch = chainOfToken(t)
+      const tokChain = tch ? tch.split(':') : []
+      const g = MANAGED.find((gr) => matchGroup(t, gr, tch) !== null && keyFor(gr, tokChain) in draft)
+      const key = g && keyFor(g, tokChain)
+      if (key) {
+        stagedShown.add(key)
         const cap = el('button', 'pair'); cap.title = 'Click to discard this change'
-        cap.append(el('span', 'old', t), el('span', 'ar', '→'), el('span', 'new', tokenFor(g, draft[g])))
-        cap.onclick = () => unstage(g)
+        cap.append(el('span', 'old', t), el('span', 'ar', '→'), el('span', 'new', tokenFor(key, draft[key])))
+        cap.onclick = () => unstage(key)
         strip.appendChild(cap)
         continue
       }
-      const managed = MANAGED.some((gr) => matchGroup(t, gr) !== null); const arb = /\[[^\]]*\]/.test(t)
+      const managed = MANAGED.some((gr) => matchGroup(t, gr, tch) !== null); const arb = /\[[^\]]*\]/.test(t)
       strip.appendChild(el('span', 'tk' + (arb ? ' arb' : managed ? ' mine' : ''), t))
     }
-    for (const [g, v] of Object.entries(draft)) {
-      if (stagedShown.has(g)) continue
-      const chip = el('button', 'tk now', '+ ' + tokenFor(g, v))
+    for (const [k, v] of Object.entries(draft)) {
+      if (stagedShown.has(k) || k === '#text') continue // text shows in its section + the rail, not as a class chip
+      const chip = el('button', 'tk now', '+ ' + tokenFor(k, v))
       chip.title = 'Click to discard this change'
-      chip.onclick = () => unstage(g)
+      chip.onclick = () => unstage(k)
       strip.appendChild(chip)
     }
     card.appendChild(strip)
@@ -890,27 +1357,57 @@ function render() {
   crumb.appendChild(card)
 
   if (sel.dirty) c.appendChild(el('div', 'banner amber', 'This file has uncommitted manual changes — consider committing first.'))
-  if (sel.locked?.length) c.appendChild(el('div', 'banner amber', 'Locked by a runtime condition (edits to these refuse): ' + sel.locked.join(' · ')))
+  // the lock is chain-blind server-side: a `hover:` edit to a locked group refuses too, so say so
+  if (sel.locked?.length) c.appendChild(el('div', 'banner amber', 'Locked by a runtime condition — these controls are read-only in every variant: ' + sel.locked.join(' · ')))
 
   if (sel.classes === null) {
     const r = el('div', 'refused')
     const rh = el('div', 'rh'); rh.append(el('span', null, 'Can’t edit this safely'), el('span', 'code', sel.reason || 'refused'))
     r.appendChild(rh)
     const why = el('div', 'why')
-    if (sel.reason === 'no-classname') why.append('This element has no ', el('b', null, 'className'), ' to edit.')
+    if (sel.instanceOf) why.append('This ', el('b', null, `<${sel.instanceOf.component}>`), ' usage builds its own ', el('b', null, 'className'), ' at runtime, so a per-instance edit can’t reach it. Go back to the component to edit what it renders.')
+    else if (sel.reason === 'no-classname') why.append('This element has no ', el('b', null, 'className'), ' to edit.')
     else { why.append('Its ', el('b', null, 'className'), ' is computed at runtime, so Writeback ', el('b', null, 'refuses instead of guessing'), ' — a wrong guess would corrupt your source.') }
     r.appendChild(why)
-    if (sel.hints?.length) { const h = el('div', 'hints'); h.appendChild(el('div', 'lead', 'The classes likely come from a call site — edit there:')); for (const hint of sel.hints) h.appendChild(jumpLink(hint)); r.appendChild(h) }
-    c.appendChild(r); updateRail(); return
+    // a `cn(base, className)` root refuses here, but the component DOES forward className —
+    // that is exactly the case per-instance editing exists for, so offer the switch inline
+    if (sel.hints?.length && !sel.instanceOf) {
+      const h = el('div', 'hints')
+      const forwards = sel.instance?.forwards
+      h.appendChild(el('div', 'lead', forwards
+        ? 'The classes come from a call site — jump there, or edit just that one instance:'
+        : 'The classes likely come from a call site — edit there:'))
+      for (const hint of sel.hints) {
+        if (!forwards) { h.appendChild(jumpLink(hint)); continue }
+        const row = el('div', 'instrow')
+        row.append(jumpLink(hint), instanceBtn(hint))
+        h.appendChild(row)
+      }
+      r.appendChild(h)
+    }
+    c.appendChild(r)
+    // a computed className doesn't make the TEXT dynamic — still offer the text edit
+    if (sel.text !== undefined) c.appendChild(makeSection('Text', [textRow()]))
+    updateRail(); return
   }
 
   if (sel.instance) {
     const b = el('div', 'banner'); b.append('Edits change the ', el('b', null, sel.instance.component), ' component — every instance updates. ')
     if (!sel.instance.forwards) b.append('It doesn’t accept a className prop, so per-instance editing isn’t possible.')
-    else if (sel.hints?.length) { b.append('To change just one, edit its call site: '); sel.hints.forEach((hint) => b.appendChild(jumpLinkInline(hint))) }
+    else if (sel.hints?.length) {
+      // it DOES forward className, so each call site can be styled on its own — offer that
+      // switch directly rather than only a jump link (Feature B)
+      b.append('It forwards className, so one instance can be styled on its own:')
+      for (const hint of sel.hints) {
+        const row = el('div', 'instrow')
+        row.append(jumpLinkInline(hint), instanceBtn(hint))
+        b.appendChild(row)
+      }
+    }
     c.appendChild(b)
   }
 
+  if (sel.text !== undefined) c.appendChild(makeSection('Text', [textRow()]))
   c.appendChild(makeSection('Spacing', [
     stepperOver('p', 'padding', config.spacing), stepperOver('px', 'pad x', config.spacing), stepperOver('py', 'pad y', config.spacing),
     stepperOver('m', 'margin', config.spacing), stepperOver('gap', 'gap', config.spacing),
@@ -918,7 +1415,7 @@ function render() {
   c.appendChild(makeSection('Typography', [
     stepperOver('text-size', 'size', SIZES, { startAt: SIZES.indexOf('base'), previewCss: (v) => v && { fontSize: SIZE_CSS[v] } }),
     stepperOver('font-weight', 'weight', WEIGHTS, { startAt: WEIGHTS.indexOf('normal'), previewCss: (v) => v && { fontWeight: String(WEIGHT_CSS[v]) } }),
-    selectOver('font-family', 'font', Object.keys(config.fonts || {})),
+    fontControl(),
     stepperOver('tracking', 'tracking', TRACKING, { startAt: TRACKING.indexOf('normal') }),
     stepperOver('leading', 'leading', LEADING, { startAt: LEADING.indexOf('normal') }),
   ]))

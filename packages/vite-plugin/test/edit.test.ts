@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveLoc, applyEdit, applyCallSiteEdit, type EditHost } from '../src/edit'
+import { resolveLoc, applyEdit, applyCallSiteEdit, applyTextEdit, ownClassesAt, type EditHost } from '../src/edit'
 
 /**
  * In-memory stand-in for the bridge's real host (src/imports.ts): relative specifiers
@@ -785,5 +785,367 @@ export function Page() {
     const r = applyEdit(PAGE, STATIC, op('p', '8'), 'src/Page.tsx', host())
     expect(r.ok && r.code).toContain(`<Card className="p-8 flex">a</Card>`)
     expect(r.ok && r.file).toBe('src/Page.tsx')
+  })
+})
+
+describe('text editing', () => {
+  const T = [
+    `export const A = ({ on }: any) => (`,
+    `  <div className="p-2">`,
+    `    <h1 className="text-xl">Hello</h1>`,
+    `    <p className="m-1">Fish &amp; Chips</p>`,
+    `    <span className={clsx('x', dyn())}>Label</span>`,
+    `    <em className="e">{on ? 'a' : 'b'}</em>`,
+    `    <div className="mix"><b>x</b> tail</div>`,
+    `    <p className="empty"></p>`,
+    `    <img className="i" />`,
+    `    <h2 className="two">`,
+    `      Two line`,
+    `    </h2>`,
+    `  </div>`,
+    `)`,
+  ].join('\n') + '\n'
+  const loc = (line: number) => ({ file: 'src/T.tsx', line, col: 0 })
+  const tOp = (value: string) => ({ kind: 'text' as const, value })
+
+  it('resolve surfaces the text of a single static JSXText child', () => {
+    const r: any = resolveLoc(T, loc(3))
+    expect(r.classes).toEqual(['text-xl'])
+    expect(r.text).toBe('Hello')
+  })
+
+  it('text is the RAW slice — HTML entities survive display', () => {
+    expect((resolveLoc(T, loc(4)) as any).text).toBe('Fish &amp; Chips')
+  })
+
+  it('a refused (computed-className) element still offers its text', () => {
+    const r: any = resolveLoc(T, loc(5))
+    expect(r.classes).toBeNull()
+    expect(r.reason).toBe('computed-classname')
+    expect(r.text).toBe('Label')
+  })
+
+  it('expression children, mixed children, containers, and self-closing offer no text', () => {
+    expect((resolveLoc(T, loc(6)) as any).text).toBeUndefined() // {on ? 'a' : 'b'}
+    expect((resolveLoc(T, loc(7)) as any).text).toBeUndefined() // <b>x</b> tail
+    expect((resolveLoc(T, loc(2)) as any).text).toBeUndefined() // element children
+    expect((resolveLoc(T, loc(9)) as any).text).toBeUndefined() // <img />
+  })
+
+  it('an empty non-self-closing element offers empty text (insertable)', () => {
+    expect((resolveLoc(T, loc(8)) as any).text).toBe('')
+  })
+
+  it('multi-line text is trimmed to its core', () => {
+    expect((resolveLoc(T, loc(10)) as any).text).toBe('Two line')
+  })
+
+  it('replaces text and touches nothing else', () => {
+    const r = applyTextEdit(T, loc(3), tOp('Goodbye'), 'src/T.tsx')
+    if (!r.ok) throw new Error('refused')
+    expect(r.code).toBe(T.replace('>Hello<', '>Goodbye<'))
+    expect(r.file).toBe('src/T.tsx')
+    expect(r.preSource).toBe(T)
+    expect(r.diff).toContain('--- a/src/T.tsx')
+  })
+
+  it('JSX-special characters are written as a {"…"} expression and still parse', () => {
+    const r = applyTextEdit(T, loc(3), tOp('a {b} <c>'), 'src/T.tsx')
+    if (!r.ok) throw new Error('refused')
+    expect(r.code).toContain('<h1 className="text-xl">{"a {b} <c>"}</h1>')
+  })
+
+  it('meaningful leading/trailing whitespace forces the expression form', () => {
+    const r = applyTextEdit(T, loc(3), tOp('  padded  '), 'src/T.tsx')
+    if (!r.ok) throw new Error('refused')
+    expect(r.code).toContain('{"  padded  "}')
+  })
+
+  it('inserts into an empty element', () => {
+    const r = applyTextEdit(T, loc(8), tOp('hi'), 'src/T.tsx')
+    if (!r.ok) throw new Error('refused')
+    expect(r.code).toContain('<p className="empty">hi</p>')
+  })
+
+  it('multi-line text replacement keeps the surrounding indentation', () => {
+    const r = applyTextEdit(T, loc(10), tOp('One line'), 'src/T.tsx')
+    if (!r.ok) throw new Error('refused')
+    expect(r.code).toContain('      One line\n    </h2>')
+  })
+
+  it('refuses elements with no safely editable text', () => {
+    for (const line of [6, 7, 9]) {
+      const r = applyTextEdit(T, loc(line), tOp('x'), 'src/T.tsx')
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.reason).toBe('unknown-edit')
+    }
+  })
+})
+
+/**
+ * Feature A: the panel's variant-chain selector emits ops with `variants: ['hover'|'md'|…]`.
+ * The engine already keyed conflict groups by (group, chain); these lock in that the WRITE
+ * path — segment choice, sibling-segment stripping, cva slots, call sites — is chain-scoped
+ * too, and that base-chain behaviour is unchanged when variant tokens sit next to it.
+ */
+describe('variant-aware editing (Feature A)', () => {
+  const vop = (group: any, value: string, variants: string[] = []) => ({ kind: 'tw' as const, group, variants, value })
+
+  const V = `export const V = () => (
+  <div>
+    <a className="text-slate-400 hover:text-white text-sm">n</a>
+    <span className="p-2">s</span>
+  </div>
+)
+`
+  const LINK = { file: 'V.tsx', line: 3, col: 4 }
+  const SPAN = { file: 'V.tsx', line: 4, col: 4 }
+
+  it('resolve hands back variant tokens as-is (they are ordinary classes)', () => {
+    expect(resolveLoc(V, LINK)).toMatchObject({ classes: ['text-slate-400', 'hover:text-white', 'text-sm'] })
+  })
+
+  it('replaces the hover token and leaves the base color alone', () => {
+    const r = applyEdit(V, LINK, vop('text', 'emerald-300', ['hover']), 'V.tsx')
+    expect(r.ok && r.code).toContain('className="text-slate-400 hover:text-emerald-300 text-sm"')
+  })
+
+  it('edits the base color without touching the hover token', () => {
+    const r = applyEdit(V, LINK, vop('text', 'slate-200'), 'V.tsx')
+    expect(r.ok && r.code).toContain('className="text-slate-200 hover:text-white text-sm"')
+  })
+
+  it('appends a variant token when the element only has the base one', () => {
+    const r = applyEdit(V, SPAN, vop('p', '6', ['md']), 'V.tsx')
+    expect(r.ok && r.code).toContain('className="p-2 md:p-6"')
+  })
+
+  it('text-size and hover text-color stay in separate groups under a chain', () => {
+    const r = applyEdit(V, LINK, vop('text-size', 'lg', ['hover']), 'V.tsx')
+    expect(r.ok && r.code).toContain('className="text-slate-400 hover:text-white text-sm hover:text-lg"')
+  })
+
+  it('sibling clsx segments are stripped per chain, not per group', () => {
+    const src = `const C = () => <div className={clsx('p-2 hover:p-3', 'p-4 hover:p-5')}>x</div>\n`
+    const loc = { file: 'C.tsx', line: 1, col: 16 }
+    const r = applyEdit(src, loc, vop('p', '8', ['hover']), 'C.tsx')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    // exactly one hover padding survives, and BOTH base paddings are untouched
+    expect(r.code.match(/hover:p-\d/g)).toEqual(['hover:p-8'])
+    expect(r.code.match(/(?<!hover:)\bp-\d/g)).toEqual(['p-2', 'p-4'])
+  })
+
+  it('a cva variant slot owning the hover token receives the edit (not the base string)', () => {
+    const src = `const button = cva('rounded-md hover:bg-blue-700', {
+  variants: { intent: { primary: 'bg-blue-600 hover:bg-blue-500' } },
+  defaultVariants: { intent: 'primary' },
+})
+export const B = () => <button className={button()}>b</button>
+`
+    const r = applyEdit(src, { file: 'B.tsx', line: 5, col: 23 }, vop('bg', 'sky-400', ['hover']), 'B.tsx')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.code).toContain(`primary: 'bg-blue-600 hover:bg-sky-400'`)
+    // the base segment's competing hover token is stripped, so only one can win
+    expect(r.code).toContain(`cva('rounded-md', {`)
+  })
+
+  it('call-site edits carry the chain too', () => {
+    const CARD = `export const Card = ({ className }: any) => <div className={className} />\n`
+    const PAGE = `import { Card } from './card'
+export const P = () => <Card className="p-2">a</Card>
+`
+    const host = memHost({ 'card.tsx': CARD })
+    const r = applyCallSiteEdit(PAGE, { file: 'P.tsx', line: 2, col: 23 }, vop('p', '6', ['md']), 'P.tsx', host)
+    expect(r.ok && r.code).toContain('<Card className="p-2 md:p-6">')
+  })
+
+  it('a conditional branch locks its group across EVERY chain (conservative on purpose)', () => {
+    // `on && 'hover:bg-blue-500'` can flip at runtime; a static base-bg edit would silently
+    // fight it in the same declaration, so the whole bg group refuses — chain or no chain.
+    const src = `const C = ({ on }: any) => <div className={clsx('p-2', on && 'hover:bg-blue-500')}>x</div>\n`
+    const loc = { file: 'C.tsx', line: 1, col: 26 }
+    expect(applyEdit(src, loc, vop('bg', 'red-500', ['hover']), 'C.tsx')).toEqual({ ok: false, reason: 'locked-group' })
+    expect(applyEdit(src, loc, vop('bg', 'red-500'), 'C.tsx')).toEqual({ ok: false, reason: 'locked-group' })
+  })
+})
+
+/**
+ * Feature B: the panel's per-instance mode needs the classes a call-site edit can actually
+ * WRITE — the usage's own className attribute. `resolveLoc` answers "what does this element
+ * render", which for `<Card className={card()} />` is a cva definition in another file; a
+ * client that drove its controls from that would show classes its edits never touch.
+ * Never a regex over source: same parse → findElement → static-attribute-range path the
+ * write takes, so the two can't drift.
+ */
+describe('own call-site classes (Feature B)', () => {
+  const CARD = `export function Card({ className, ...rest }: any) {
+  return <div className={className} {...rest} />
+}
+`
+  const PAGE = `import { Card } from './ui/card'
+const card = cva('rounded-md p-4')
+
+export function Page() {
+  return (
+    <div className="p-4">
+      <Card className="p-2 flex">a</Card>
+      <Card>b</Card>
+      <Card title="x" />
+      <Card className={cn('p-2', x)}>d</Card>
+      <Card className={card()}>e</Card>
+      <Card className={\`p-3 gap-2\`}>f</Card>
+      <Card className="">g</Card>
+    </div>
+  )
+}
+`
+  const at = (line: number, col = 6) => ({ file: 'src/Page.tsx', line, col })
+
+  it('reads the tokens on the usage own static className', () => {
+    expect(ownClassesAt(PAGE, at(7))).toEqual({ classes: ['p-2', 'flex'] })
+  })
+
+  it('an expression-free template literal is as static as a string', () => {
+    expect(ownClassesAt(PAGE, at(12))).toEqual({ classes: ['p-3', 'gap-2'] })
+  })
+
+  it('no className attribute is EDITABLE-EMPTY, not a refusal — the write appends one', () => {
+    // distinct from `null`: the panel offers the full control set and the first edit
+    // creates the attribute (the one sanctioned append)
+    expect(ownClassesAt(PAGE, at(8))).toEqual({ classes: [] })
+    expect(ownClassesAt(PAGE, at(9))).toEqual({ classes: [] }) // other attrs, still no className
+    expect(ownClassesAt(PAGE, at(13))).toEqual({ classes: [] }) // className="" — empty, not absent
+  })
+
+  it('refuses a computed usage className, exactly where applyCallSiteEdit would', () => {
+    expect(ownClassesAt(PAGE, at(10))).toEqual({ classes: null })
+    const r = applyCallSiteEdit(PAGE, at(10), { kind: 'tw', group: 'p', variants: [], value: '8' }, 'src/Page.tsx', memHost({ 'src/ui/card.tsx': CARD }))
+    expect(r).toEqual({ ok: false, reason: 'computed-classname' })
+  })
+
+  it('is NOT the definition classes resolveLoc reports for a cva usage — the point of `own`', () => {
+    const loc = at(11)
+    // what the element renders: the cva base, which lives at the definition
+    expect(resolveLoc(PAGE, loc).classes).toEqual(['rounded-md', 'p-4'])
+    // what a per-instance edit could write: nothing — the usage's own value is computed
+    expect(ownClassesAt(PAGE, loc)).toEqual({ classes: null })
+  })
+
+  it('is null for anything that is not a component usage', () => {
+    expect(ownClassesAt(PAGE, { file: 'src/Page.tsx', line: 6, col: 4 })).toBeNull() // host <div>
+    expect(ownClassesAt(PAGE, at(99))).toBeNull() // no element on that line
+    expect(ownClassesAt('const x = (', at(1))).toBeNull() // unparseable
+  })
+})
+
+/**
+ * Review finding (HIGH): `op.value` / `op.variants` were spliced in unvalidated, and
+ * reparse-verify could not see it — the injected result is VALID JavaScript. Both write paths
+ * now reject the token on its characters, before any splice.
+ */
+describe('injected class tokens never reach the splice', () => {
+  const bad = (value: string, variants: string[] = []) => ({ kind: 'tw' as const, group: 'p' as const, variants, value })
+  const ATTR = `const A = () => <div className="p-4">hi</div>\n`
+  const TPL = `const A = () => <div className={\`p-4\`}>hi</div>\n`
+  const LOC = { file: 'A.tsx', line: 1, col: 16 }
+
+  it('refuses a value that would close the attribute and add JSX of its own', () => {
+    const r = applyEdit(ATTR, LOC, bad('x" onClick={alert(1)} z="'), 'A.tsx')
+    expect(r).toEqual({ ok: false, reason: 'off-scale' })
+  })
+
+  it('refuses a variant that would turn a static template literal into an expression', () => {
+    // the value here is perfectly on-scale: the design-system gate alone would pass this
+    const r = applyEdit(TPL, LOC, bad('4', ['${x}']), 'A.tsx')
+    expect(r).toEqual({ ok: false, reason: 'off-scale' })
+  })
+
+  it('refuses on the call-site path too, where the whole attribute is being written', () => {
+    const CARD = `export function Card({ className }: any) { return <div className={className} /> }\n`
+    const PAGE = `import { Card } from './ui/card'\nexport const P = () => <Card>x</Card>\n`
+    const r = applyCallSiteEdit(PAGE, { file: 'src/Page.tsx', line: 2, col: 23 }, bad('4" onClick={x} y="'), 'src/Page.tsx', memHost({ 'src/ui/card.tsx': CARD }))
+    expect(r).toEqual({ ok: false, reason: 'off-scale' })
+  })
+
+  it('still accepts the legitimate arbitrary-value escape hatch', () => {
+    const r = applyEdit(ATTR, LOC, bad('[17px]'), 'A.tsx')
+    expect(r.ok && r.code).toContain('className="p-[17px]"')
+  })
+})
+
+/** Review finding: a one-token bump reflowed the whole className, rewriting untouched lines. */
+describe('a multi-line className keeps its formatting through a splice', () => {
+  const SRC = `const A = () => (
+  <div
+    className={\`
+      p-4
+      m-2
+      text-white
+    \`}
+  >x</div>
+)
+`
+  const LOC = { file: 'A.tsx', line: 2, col: 2 }
+
+  it('changes only the token that moved', () => {
+    const r = applyEdit(SRC, LOC, { kind: 'tw', group: 'p', variants: [], value: '8' }, 'A.tsx')
+    expect(r.ok && r.code).toBe(SRC.replace('p-4', 'p-8'))
+    expect(r.ok && r.diff.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---'))).toEqual(['-      p-4'])
+  })
+
+  it('appends onto a new line of its own rather than collapsing the list', () => {
+    const r = applyEdit(SRC, LOC, { kind: 'tw', group: 'gap', variants: [], value: '2' }, 'A.tsx')
+    expect(r.ok && r.code).toBe(SRC.replace('text-white', 'text-white\n      gap-2'))
+  })
+})
+
+/** Review coverage gap: a variant chain through the cva definition, and through a call site. */
+describe('variant chains beyond the base path', () => {
+  const vop = (group: any, value: string, variants: string[]) => ({ kind: 'tw' as const, group, variants, value })
+
+  it('replaces an existing hover token inside the active cva slot, in place', () => {
+    const UI = `export const btn = cva('rounded-md hover:bg-blue-700', {
+  variants: { size: { md: 'px-4 hover:px-5' } },
+  defaultVariants: { size: 'md' },
+})
+`
+    const APP = `import { btn } from './ui/btn'\nexport const A = () => <button className={btn()}>x</button>\n`
+    const host = memHost({ 'src/ui/btn.ts': UI })
+    const loc = { file: 'src/App.tsx', line: 2, col: 23 }
+    // the slot owns `hover:px-*`, so the edit lands there and NOT beside the base
+    const r = applyEdit(APP, loc, vop('px', '8', ['hover']), 'src/App.tsx', host)
+    expect(r.ok && r.file).toBe('src/ui/btn.ts')
+    expect(r.ok && r.code).toContain(`md: 'px-4 hover:px-8'`)
+    expect(r.ok && r.code).toContain(`cva('rounded-md hover:bg-blue-700'`) // base untouched
+    // a chain with no member anywhere appends to the BASE segment
+    const r2 = applyEdit(APP, loc, vop('bg', 'black', ['dark']), 'src/App.tsx', host)
+    expect(r2.ok && r2.code).toContain(`cva('rounded-md hover:bg-blue-700 dark:bg-black'`)
+  })
+
+  it('a reordered chain edits the token that is already there, never a second one', () => {
+    const SRC = `const A = () => <div className="hover:md:p-2 flex">x</div>\n`
+    const r = applyEdit(SRC, { file: 'A.tsx', line: 1, col: 16 }, vop('p', '8', ['md', 'hover']), 'A.tsx')
+    expect(r.ok && r.code).toContain('className="md:hover:p-8 flex"')
+    expect((r.ok && r.code.match(/p-\d/g)) || []).toEqual(['p-8'])
+  })
+
+  it('carries a chain onto a call site, and warns on a same-chain clash only', () => {
+    const CARD = `export function Card({ className }: any) {
+  return <div className={clsx('rounded hover:p-1', className)} />
+}
+`
+    const PAGE = `import { Card } from './ui/card'
+export const P = () => <Card className="p-2">x</Card>
+`
+    const host = memHost({ 'src/ui/card.tsx': CARD })
+    const loc = { file: 'src/Page.tsx', line: 2, col: 23 }
+    const r = applyEdit(PAGE, loc, vop('p', '4', ['hover']), 'src/Page.tsx', host)
+    expect(r.ok && r.code).toContain('<Card className="p-2 hover:p-4">')
+    expect(r.ok && r.warn).toContain('hover:p-1') // the component's own hover padding clashes
+    const other = applyCallSiteEdit(PAGE, loc, vop('gap', '2', ['md']), 'src/Page.tsx', host)
+    expect(other.ok && other.code).toContain('<Card className="p-2 md:gap-2">')
+    expect(other.ok && other.warn).toBeUndefined() // different chain, different group: no clash
   })
 })

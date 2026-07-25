@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
-/* Extra font families — the panel reads these from the theme (config.fonts),
-   so the font control offers more than the default sans/serif/mono. */
+/* The project's own design tokens. The panel reads them from the theme (config.colors /
+   config.fonts), so the font control offers more than the default sans/serif/mono — and
+   because they are declared HERE, their values are editable in place (Feature C). */
 @theme {
+  --color-brand: #ff6600;
   --font-display: "Georgia", "Times New Roman", serif;
   --font-body: "Segoe UI", system-ui, sans-serif;
   --font-condensed: "Arial Narrow", "Segoe UI", sans-serif;
