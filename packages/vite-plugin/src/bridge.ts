@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMsg, ServerMsg, Loc } from '@writeback/protocol'
 import { BRIDGE_PORT } from '@writeback/protocol'
-import { resolveLoc, applyEdit, hashOf } from './edit.ts'
+import { resolveLoc, applyEdit, applyCallSiteEdit, hashOf } from './edit.ts'
+import { makeEditHost } from './imports.ts'
 import { getScale } from './theme.ts'
 import { callSiteHints, cvaBlast, forwardsClassName } from './attribute.ts'
 
@@ -34,6 +35,20 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
     return abs.startsWith(resolve(root) + sep) ? abs : null
   }
   const rootPosix = resolve(root).replace(/\\/g, '/')
+
+  // Feature 2: cross-file cva follows relative imports through `makeEditHost` (src/imports.ts),
+  // which owns extension/index resolution and the never-leave-root confinement.
+  const makeHost = (overlay?: Map<string, string>) => makeEditHost(root, overlay)
+
+  /**
+   * The optimistic-concurrency token. A cross-file cva edit is decided by TWO files: the
+   * CALL SITE picks the element and the active variant slot, the DEFINITION receives the
+   * write. Hashing only the definition would let the call site change underneath us and
+   * silently retarget the write to a different slot, so the token covers both files.
+   * Clients treat it as opaque: whatever `resolved` handed back is what `edit` echoes.
+   */
+  const lockHash = (callSource: string, editSource: string, sameFile: boolean) =>
+    sameFile ? hashOf(editSource) : hashOf(hashOf(callSource) + ':' + hashOf(editSource))
 
   // Enforce the design system server-side, so the "agents can't emit off-scale
   // values" guarantee is real over /api and MCP, not just in the panel UI.
@@ -168,27 +183,37 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
       return
     }
     const source = readFileSync(abs, 'utf8')
-    if (hashOf(source) !== msg.hash) {
-      send({ t: 'refused', id: msg.id, loc: msg.loc, reason: 'hash-mismatch' })
-      return
-    }
-    const r = applyEdit(source, msg.loc, msg.op, msg.loc.file)
+    // target:'callsite' (M4) edits the component USAGE at loc; default edits what it renders
+    const apply = msg.target === 'callsite' ? applyCallSiteEdit : applyEdit
+    const r = apply(source, msg.loc, msg.op, msg.loc.file, makeHost())
     if (!r.ok) {
       send({ t: 'refused', id: msg.id, loc: msg.loc, reason: r.reason })
       return
     }
-    if (msg.dry) {
-      send({ t: 'edited', id: msg.id, loc: msg.loc, diff: r.diff, dry: true, hash: hashOf(source) })
+    // hash-mismatch covers the file we WRITE (r.file) *and*, for a cross-file cva, the
+    // call-site file that chose what to write — see lockHash.
+    const sameFile = r.file === msg.loc.file
+    if (lockHash(source, r.preSource, sameFile) !== msg.hash) {
+      send({ t: 'refused', id: msg.id, loc: msg.loc, reason: 'hash-mismatch' })
       return
     }
-    const warn = gitDirty(msg.loc.file) ? 'file has uncommitted manual changes' : undefined
-    const postHash = hashOf(r.code)
-    writeFileSync(abs, r.code) // Vite's watcher does the HMR half — never trigger a manual reload
-    const entry: JournalEntry = { id: msg.id, file: msg.loc.file, preHash: msg.hash, postHash, pre: source, diff: r.diff }
+    if (msg.dry) {
+      send({ t: 'edited', id: msg.id, loc: r.loc, diff: r.diff, dry: true, hash: msg.hash })
+      return
+    }
+    const targetAbs = safePath(r.file)
+    if (!targetAbs) {
+      send({ t: 'refused', id: msg.id, loc: msg.loc, reason: 'file-not-found' })
+      return
+    }
+    const warns = [r.warn, gitDirty(r.file) ? 'file has uncommitted manual changes' : undefined].filter(Boolean)
+    writeFileSync(targetAbs, r.code) // Vite's watcher does the HMR half — never trigger a manual reload
+    const entry: JournalEntry = { id: msg.id, file: r.file, preHash: hashOf(r.preSource), postHash: hashOf(r.code), pre: r.preSource, diff: r.diff }
     journal.set(msg.id, entry)
     logJournal(entry)
-    // return the post-edit hash so an agent can chain edits without a re-resolve
-    send({ t: 'edited', id: msg.id, loc: msg.loc, diff: r.diff, hash: postHash, ...(warn ? { warn } : {}) })
+    // echo the ELEMENT's loc (never a cva definition site, which is not an element and
+    // would refuse on the next call) + the new lock token, so an agent can chain edits
+    send({ t: 'edited', id: msg.id, loc: r.loc, diff: r.diff, hash: lockHash(source, r.code, sameFile), ...(warns.length ? { warn: warns.join('; ') } : {}) })
   }
 
   // one handler for both transports: WS (extension/panel) and POST /api (agents, curl, CI)
@@ -208,14 +233,18 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
             break
           }
           const source = readFileSync(abs, 'utf8')
-          const r = resolveLoc(source, msg.loc)
+          const r = resolveLoc(source, msg.loc, makeHost())
           const mloc = r.loc ?? msg.loc // the element's real loc (tolerant match may differ from requested)
+          // for a cross-file cva the editable source (and its hash) is the DEFINITION file;
+          // hashing/blast follow it so the client edits + verifies the right file.
+          const editSource = (r as any).editSource ?? source
+          const editFile = (r as any).editFile ?? msg.loc.file
           const extras: any = {}
           if (r.classes === null && r.reason === 'computed-classname') {
             const hints = callSiteHints(root, source, mloc)
             if (hints.length) extras.hints = hints
           }
-          const blast = cvaBlast(source)
+          const blast = cvaBlast(editSource)
           if (blast.length) extras.blast = blast
           const instance = forwardsClassName(source, mloc)
           if (instance) {
@@ -225,11 +254,21 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
               if (hints.length) extras.hints = hints
             }
           }
-          if (gitDirty(msg.loc.file)) extras.dirty = true
+          // dirtiness that matters is the file the edit will TOUCH (def file for a cross-file cva)
+          if (gitDirty(editFile)) extras.dirty = true
+          // name the file the edit would write when it is not loc.file, so the client can
+          // see (and show) that a cva definition, not the clicked element, is the target
+          if (editFile !== msg.loc.file) extras.editFile = editFile
+          // Feature 1: groups a conditional branch owns — refuse them HERE, not only on write
+          if ((r as any).locked) extras.locked = (r as any).locked
           // echo the element's REAL loc (may differ from the requested col when the
-          // agent passed just a line) so the follow-up edit uses the exact position
+          // agent passed just a line) so the follow-up edit uses the exact position.
           const echoLoc = r.loc ?? msg.loc
-          send({ t: 'resolved', loc: echoLoc, hash: hashOf(source), classes: r.classes, ...(r.classes === null ? { reason: r.reason } : {}), ...extras })
+          send({
+            t: 'resolved', loc: echoLoc,
+            hash: lockHash(source, editSource, editFile === msg.loc.file),
+            classes: r.classes, ...(r.classes === null ? { reason: r.reason } : {}), ...extras,
+          })
           break
         }
         case 'edit':
@@ -240,8 +279,19 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
             send({ t: 'refused', id: msg.id, loc: { file: '', line: 0, col: 0 }, reason: 'unknown-edit' })
             break
           }
-          // all-or-nothing: verify every edit against current file state, then write all
-          const staged = new Map<string, { abs: string; code: string }>()
+          // all-or-nothing: verify every edit against current file state, then write all.
+          // `staged` (abs → pending code) doubles as the host overlay, so several edits
+          // that land in the SAME file — including one cva definition file reached from
+          // different call sites — compose instead of clobbering each other.
+          const staged = new Map<string, string>()
+          // every file's ON-DISK content at the start of the batch: hashes must be checked
+          // against what the CLIENT saw, never against a sibling edit's staged output —
+          // otherwise one valid edit launders the stale hashes of every edit after it
+          const originals = new Map<string, string>()
+          const original = (abs: string) => {
+            if (!originals.has(abs)) originals.set(abs, readFileSync(abs, 'utf8'))
+            return originals.get(abs)!
+          }
           const diffs: string[] = []
           let failed: ServerMsg | null = null
           for (const e of msg.edits) {
@@ -254,28 +304,37 @@ export function startBridge(root: string, port = BRIDGE_PORT) {
               failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'off-scale' }
               break
             }
-            const source = staged.get(abs)?.code ?? readFileSync(abs, 'utf8')
-            if (!staged.has(abs) && hashOf(source) !== e.hash) {
-              failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'hash-mismatch' }
-              break
-            }
-            const r = applyEdit(source, e.loc, e.op, e.loc.file)
+            const source = staged.get(abs) ?? original(abs)
+            const apply = e.target === 'callsite' ? applyCallSiteEdit : applyEdit
+            const r = apply(source, e.loc, e.op, e.loc.file, makeHost(staged))
             if (!r.ok) {
               failed = { t: 'refused', id: msg.id, loc: e.loc, reason: r.reason }
               break
             }
-            staged.set(abs, { abs, code: r.code })
+            const targetAbs = safePath(r.file)
+            if (!targetAbs || !existsSync(targetAbs)) {
+              failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'file-not-found' }
+              break
+            }
+            // every edit is verified against the pre-batch content of BOTH files it depends
+            // on (see lockHash) — being the second edit into an already-staged file is not
+            // an excuse to skip the check
+            if (lockHash(original(abs), original(targetAbs), targetAbs === abs) !== e.hash) {
+              failed = { t: 'refused', id: msg.id, loc: e.loc, reason: 'hash-mismatch' }
+              break
+            }
+            staged.set(targetAbs, r.code)
             diffs.push(r.diff)
           }
           if (failed) {
             send(failed)
             break
           }
-          for (const [abs, s] of staged) {
+          for (const [abs, code] of staged) {
             const pre = readFileSync(abs, 'utf8')
-            writeFileSync(abs, s.code)
+            writeFileSync(abs, code)
             const file = abs.slice(resolve(root).length + 1).replace(/\\/g, '/')
-            const entry: JournalEntry = { id: msg.id + ':' + file, file, preHash: hashOf(pre), postHash: hashOf(s.code), pre, diff: '' }
+            const entry: JournalEntry = { id: msg.id + ':' + file, file, preHash: hashOf(pre), postHash: hashOf(code), pre, diff: '' }
             journal.set(entry.id, entry)
             logJournal(entry)
           }

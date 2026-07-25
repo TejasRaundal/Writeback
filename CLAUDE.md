@@ -10,7 +10,7 @@ from the project's real design scale, and the edit lands in the actual source fi
 - `packages/protocol` — wire types (`ClientMsg`/`ServerMsg`). The ONLY permitted coupling between packages.
 - `packages/vite-plugin` — `data-wb="file:line:col"` tagging transform (host elements only, serve-only) + WS bridge on 127.0.0.1:7331 via `configureServer`.
 - `packages/extension` — MV3 extension: picker + MAIN-world fiber walk. Dormant unless `GET /health` succeeds.
-- `packages/panel` — React panel served by the bridge at `/panel` in an iframe; owns the WS.
+- `packages/panel` — vanilla-JS panel (single `index.html`, no build) served by the bridge at `/panel` in an iframe; owns the WS.
 - `apps/playground` — React 19 + Tailwind v4 test app with deliberate `clsx()`/`cva()` refusal targets.
 
 ## Hard rules
@@ -31,9 +31,10 @@ from the project's real design scale, and the edit lands in the actual source fi
 ## Milestones
 
 M0 ✅ M1 ✅ (gate: `pnpm test`) · M2 mostly ✅ (v3 fixture project still owed) · M3 ✅ (dry-run diff approval, journal UI, bulk) ·
-M4 partial (static clsx args ✅, instance-vs-component v0) · M5 partial (cva base + active-slot editing ✅; `@theme` token editing pending) ·
+M4 ✅ (static clsx args ✅, per-instance call-site edits via `target:'callsite'` — server-enforced forwards check) · M5 partial (cva base + active-slot editing ✅; `@theme` token editing pending) ·
 Editable groups: spacing, bg/text color, text-size, font-weight/family, tracking, leading, rounded, shadow, opacity.
 OP features: nudging ✅ drift radar ✅ attribution v0 ✅ contrast ✅ copy/paste ✅ blast-list v0 ✅ git guardrail ✅ MCP ✅ export ✅ · CSS Modules/styled-components deferred.
 Agent transports: MCP (`src/mcp.ts`) + `POST /api` (same protocol over HTTP) — see `AGENTS.md`.
-Panel: light/dark themed (toggle in header), collapsible Spacing/Typography/Colors/Appearance sections.
+Panel: light/dark themed (toggle in header), collapsible Spacing/Typography/Colors/Appearance sections,
+Write rail (staged edits as diff lines; Review = server dry-run diff, then Write; bulk multi-select writes directly — protocol bulk has no dry mode).
 See `DECISIONS.md` for what "v0/deferred" means per feature.

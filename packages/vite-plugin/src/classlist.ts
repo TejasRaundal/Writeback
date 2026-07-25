@@ -95,6 +95,27 @@ export function parseToken(token: string): ParsedToken | null {
   return null
 }
 
+/**
+ * Every group a token might belong to — conservatively. `parseToken` returns null for
+ * tokens whose group is AMBIGUOUS (`text-[20px]` is a size or a colour, `font-display`
+ * a family or a weight); those still occupy a conflict group at runtime, so a caller
+ * that needs to LOCK groups (Feature 1's read-only conditional branches) must treat
+ * them as occupying all the groups they could be. Tokens that are definitively outside
+ * every supported group (`text-center`, `bg-gradient-to-r`) return [].
+ */
+export function tokenGroups(token: string): TwGroup[] {
+  const parsed = parseToken(token)
+  if (parsed) return [parsed.group]
+  const parts = splitVariants(token)
+  let base = parts[parts.length - 1]
+  if (base.startsWith('-')) base = base.slice(1)
+  // arbitrary values are the ambiguous cases parseToken deliberately declines
+  if (base.startsWith('text-')) return base.slice(5).startsWith('[') ? ['text', 'text-size'] : []
+  if (base.startsWith('shadow-')) return base.slice(7).startsWith('[') ? ['shadow'] : []
+  if (base.startsWith('font-')) return ['font-family', 'font-weight'] // unknown suffix: could be either
+  return []
+}
+
 function buildToken(group: TwGroup, variants: string[], value: string): string {
   const chain = variants.length ? variants.join(':') + ':' : ''
   const prefix = group === 'text-size' ? 'text' : group === 'font-weight' || group === 'font-family' ? 'font' : group

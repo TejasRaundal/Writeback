@@ -24,13 +24,14 @@ const TOOLS = [
   },
   {
     name: 'edit',
-    description: 'Apply one constrained Tailwind edit. group: p|px|py|pt|pr|pb|pl|m*|gap*|bg|text|text-size|font-weight|font-family|tracking|leading|rounded|shadow|opacity. value: a token from get_scale (or [arbitrary] with raw=true). hash comes from the latest resolve of this file; after each edit the file changes, so resolve again before the next edit to the same file. Returns a unified diff, or {t:refused, reason: hash-mismatch|file-not-found|parse-error}.',
+    description: 'Apply one constrained Tailwind edit. group: p|px|py|pt|pr|pb|pl|m*|gap*|bg|text|text-size|font-weight|font-family|tracking|leading|rounded|shadow|opacity. value: a token from get_scale (or [arbitrary] with raw=true). hash comes from the latest resolve of this file; after each edit the file changes, so resolve again before the next edit to the same file. Set target="callsite" with the loc of a <Component …> usage to style that ONE instance instead of the shared component (only for components that forward className; otherwise refused with reason "not-forwarded"). Returns a unified diff, or {t:refused, reason: hash-mismatch|file-not-found|parse-error|not-forwarded|locked-group}. The hash is opaque: for a cva imported from another module it locks BOTH the definition file (which is written; resolve names it in editFile) and the call site, so echo the hash from resolve/edited rather than hashing a file yourself. locked-group means the element is editable but that group is owned by a conditional branch (resolve lists them in `locked`).',
     inputSchema: {
       type: 'object',
       properties: {
         file: { type: 'string' }, line: { type: 'number' }, col: { type: 'number' },
         hash: { type: 'string' }, group: { type: 'string' }, value: { type: 'string' },
         variants: { type: 'array', items: { type: 'string' } }, raw: { type: 'boolean' },
+        target: { type: 'string', enum: ['callsite'] },
       },
       required: ['file', 'line', 'col', 'hash', 'group', 'value'],
     },
@@ -99,6 +100,7 @@ async function callTool(name: string, args: any): Promise<any> {
       const r = await ask({
         t: 'edit', id, loc: { file: args.file, line: args.line, col: args.col }, hash: args.hash,
         op: { kind: 'tw', group: args.group, variants: args.variants ?? [], value: args.value, raw: args.raw },
+        ...(args.target ? { target: args.target } : {}),
       }, ['edited', 'refused'])
       return { ...r, id }
     }

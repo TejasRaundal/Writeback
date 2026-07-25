@@ -59,7 +59,8 @@ curl -s -X POST 127.0.0.1:7331/api -d '{"t":"resolve","loc":{"file":"src/App.tsx
 
 # 3. edit — hash from resolve is an optimistic lock; group ∈ p|px|py|pt|pr|pb|pl|m*|gap*|bg|text|text-size|font-weight|font-family|tracking|leading|rounded|shadow|opacity
 curl -s -X POST 127.0.0.1:7331/api -d '{"t":"edit","id":"a1","loc":{"file":"src/App.tsx","line":35,"col":4},"hash":"<from resolve>","op":{"kind":"tw","group":"p","variants":[],"value":"8"}}'
-# → {"t":"edited","diff":"--- a/src/App.tsx …"}  or  {"t":"refused","reason":"hash-mismatch|computed-classname|parse-error"}
+# → {"t":"edited","diff":"--- a/src/App.tsx …"}  or  {"t":"refused","reason":"hash-mismatch|computed-classname|parse-error|not-forwarded|locked-group"}
+#   add "target":"callsite" to style ONE component usage instead of the component itself
 
 # 4. undo by edit id
 curl -s -X POST 127.0.0.1:7331/api -d '{"t":"undo","id":"a1"}'
@@ -68,6 +69,44 @@ curl -s -X POST 127.0.0.1:7331/api -d '{"t":"undo","id":"a1"}'
 curl -s -X POST 127.0.0.1:7331/api -d '{"t":"journal"}'
 #   add "dry":true to an edit for a no-write diff preview
 ```
+
+## Editing ONE instance instead of the shared component (`target:"callsite"`)
+
+A `loc` inside a reusable component (`<Card>`'s own markup) edits the **component definition** —
+every `<Card>` in the app changes. To restyle a single usage, send the edit with
+`"target":"callsite"` and the `loc` of the **JSX usage** (`<Card title="…" />` in the parent file):
+
+```sh
+# resolve tells you the enclosing component and whether it accepts a className
+curl -s -X POST 127.0.0.1:7331/api -d '{"t":"resolve","loc":{"file":"src/App.tsx","line":36,"col":6}}'
+#   → {"t":"resolved","classes":[…],"instance":{"component":"Card","forwards":true},
+#      "hints":[{"component":"Card","loc":{"file":"src/App.tsx","line":55,"col":10}}]}
+
+# `hints` are the call sites. resolve one to get ITS hash, then edit with target:"callsite"
+curl -s -X POST 127.0.0.1:7331/api -d '{"t":"resolve","loc":{"file":"src/App.tsx","line":55,"col":10}}'
+curl -s -X POST 127.0.0.1:7331/api -d '{"t":"edit","id":"i1","target":"callsite",
+  "loc":{"file":"src/App.tsx","line":55,"col":10},"hash":"<hash of the CALL-SITE file>",
+  "op":{"kind":"tw","group":"px","variants":[],"value":"6"}}'
+```
+
+- The edit always lands in the **call-site file**, never the component's.
+- The usage's className is handled three ways: a **static string** (or expression-free template)
+  gets the normal group-aware replacement; **no `className` at all** gets a brand-new
+  `className="…"` attribute appended (still an AST splice + reparse-verify — the only place
+  Writeback adds an attribute); anything **computed** is refused `computed-classname`.
+- Guarded server-side: if the component doesn't forward className (no `className` prop, no
+  `{...props}` spread), the edit is refused `not-forwarded` rather than writing a class the
+  component would silently drop. Check `resolved.instance.forwards` first. The component is
+  followed through relative imports and barrel re-exports; if its definition can't be read
+  (bare/`node_modules` specifier, unresolvable module) the answer is also `not-forwarded`.
+- A `warn` on the `edited` reply means the write went through but the component sets a class in
+  the same conflict group on its own root and does not use tailwind-merge — both classes reach the
+  DOM and stylesheet order, not source order, picks the winner. Surface it.
+- `target` is only meaningful on a PascalCase component usage — a host element (`<div>`) with
+  `target:"callsite"` is refused `unknown-edit`. Omit `target` and it edits normally.
+- `bulk` edits accept the same optional `target` per entry. Journal, `undo` and `/export`
+  treat these like any other edit.
+- MCP exposes the same capability as the `edit` tool's `target: "callsite"` argument.
 
 ## `loc.file` — paths are relative to the dev-server root, NOT the repo
 
@@ -87,11 +126,14 @@ Sources, in preference order:
 ## Rules for agents
 
 - Always `resolve` before your FIRST `edit`; reuse the returned `hash`. A `hash-mismatch` refusal means the file changed — re-resolve, don't retry blindly.
+- **`hash` is an opaque token — echo it, never compute it.** For a cva imported from another module the edit writes a DIFFERENT file than `loc.file` (`resolved.editFile` names it), and the token locks *both* files: the definition that receives the write, and the call site that decides which variant slot gets written. Re-hashing a file yourself will mismatch.
+- `reason:"locked-group"` = the element is editable, but that one group is owned by a read-only conditional branch (`cond ? 'bg-a' : 'bg-b'`), so a static edit would lose at runtime. `resolved.locked` lists these groups up front — pick another group, or edit the branch by hand. This is distinct from `computed-classname`, which means the element is not editable at all.
 - **Chaining edits to the same file:** every `edited` reply now includes the post-edit `hash`. Use it as the `hash` for your next `edit` on that file — no re-resolve needed between edits. (One `edit` = one conflict group, so multi-property changes are a short chain.)
 - `reason:"file-not-found"` = wrong `loc.file` path; the reply includes `root` so you can fix it inline (no `config` call needed).
 - `reason:"off-scale"` = your `value` isn't in the project's spacing scale or color palette. The design system is **enforced server-side** — pick a real token from `config`, or pass `raw:true` with a bracketed value (e.g. `"[17px]"`) to deliberately go off-scale.
 - Call `config` **once** and cache it — the color palette is large; re-fetching it per edit wastes context.
 - `classes: null` with `computed-classname`/`no-classname` means the className is computed (clsx with expressions, dynamic cva args, props). Follow the `hints` array (call sites) if present; otherwise edit the file conventionally.
+- Styling a shared component changes every usage. When `resolved.instance.forwards` is `true` and the user meant "just this one", edit the call site with `target:"callsite"` (see above) instead.
 - Every successful edit returns a unified `diff` — surface it to the user.
 - Undo via the protocol (`{"t":"undo","id":…}`), not by reverse-editing.
 - The playground for smoke-testing lives at `apps/playground` (`pnpm dev`).

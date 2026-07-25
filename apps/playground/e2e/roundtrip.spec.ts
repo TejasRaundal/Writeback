@@ -194,7 +194,80 @@ test('dry-run previews without writing; bulk is all-or-nothing; export serves ma
   }
 })
 
-test('clsx elements are refused at resolve time', async ({ page }) => {
+test('fully-dynamic clsx elements are refused at resolve time', async ({ page }) => {
+  await page.goto('http://localhost:5173')
+  const dyn = page.getByRole('button', { name: 'Dynamic class' })
+  const stamp = await dyn.getAttribute('data-wb')
+  const parts = stamp!.split(':')
+  const loc = { col: Number(parts.pop()), line: Number(parts.pop()), file: parts.join(':') }
+
+  const ws = await connect()
+  try {
+    const resolved = await request(ws, { t: 'resolve', loc }, 'resolved')
+    expect(resolved.classes).toBeNull()
+    expect(resolved.reason).toBe('computed-classname')
+  } finally {
+    ws.close()
+  }
+})
+
+test('per-instance call-site edits land on the usage, and undo (Feature 3)', async ({ page }) => {
+  const original = readFileSync(APP, 'utf8')
+  await page.goto('http://localhost:5173')
+  await expect(page.getByText('Live', { exact: true })).toBeVisible()
+
+  // component usages carry no data-wb stamp (only host elements do) — find the loc the
+  // way an agent does: one grep for the line, then a col-0 resolve that snaps to it
+  const lineOf = (needle: string) => original.split('\n').findIndex((l) => l.includes(needle)) + 1
+  const withClass = { file: 'src/App.tsx', line: lineOf('<Badge className="px-3">'), col: 0 }
+  const bare = { file: 'src/App.tsx', line: lineOf('<Badge>Beta</Badge>'), col: 0 }
+  const card = { file: 'src/App.tsx', line: lineOf('<Card title="Revenue"'), col: 0 }
+
+  const ws = await connect()
+  try {
+    // 1. usage that already has a className: normal group-aware replace, in App.tsx
+    const r1 = await request(ws, { t: 'resolve', loc: withClass }, 'resolved')
+    expect(r1.classes).toEqual(['px-3'])
+    const e1 = await request(ws, {
+      t: 'edit', id: 'inst-1', loc: r1.loc, hash: r1.hash, target: 'callsite',
+      op: { kind: 'tw', group: 'px', variants: [], value: '6' },
+    }, 'edited')
+    expect(e1.t).toBe('edited')
+    expect(readFileSync(APP, 'utf8')).toContain('<Badge className="px-6">Live</Badge>')
+    await expect(page.getByText('Live', { exact: true })).toHaveClass(/px-6/, { timeout: 10_000 })
+
+    // 2. usage with NO className: the sanctioned append of a brand-new attribute
+    const r2 = await request(ws, { t: 'resolve', loc: bare }, 'resolved')
+    expect(r2.reason).toBe('no-classname')
+    const e2 = await request(ws, {
+      t: 'edit', id: 'inst-2', loc: r2.loc, hash: r2.hash, target: 'callsite',
+      op: { kind: 'tw', group: 'px', variants: [], value: '4' },
+    }, 'edited')
+    expect(e2.t).toBe('edited')
+    expect(readFileSync(APP, 'utf8')).toContain('<Badge className="px-4">Beta</Badge>')
+
+    // 3. a component that does NOT forward className is refused server-side
+    const r3 = await request(ws, { t: 'resolve', loc: card }, 'resolved')
+    const e3 = await request(ws, {
+      t: 'edit', id: 'inst-3', loc: r3.loc, hash: r3.hash, target: 'callsite',
+      op: { kind: 'tw', group: 'px', variants: [], value: '4' },
+    }, 'edited')
+    expect(e3.t).toBe('refused')
+    expect(e3.reason).toBe('not-forwarded')
+
+    // journal + undo behave like any other edit
+    const journal = await request(ws, { t: 'journal' }, 'journal')
+    expect(journal.entries.map((e: any) => e.id)).toEqual(expect.arrayContaining(['inst-1', 'inst-2']))
+    await request(ws, { t: 'undo', id: 'inst-2' }, 'edited')
+    await request(ws, { t: 'undo', id: 'inst-1' }, 'edited')
+    expect(readFileSync(APP, 'utf8')).toBe(original)
+  } finally {
+    ws.close()
+    if (readFileSync(APP, 'utf8') !== original) writeFileSync(APP, original)
+  }
+})
+
+test('conditional clsx elements resolve their static arg (Feature 1)', async ({ page }) => {
   await page.goto('http://localhost:5173')
   const toggle = page.getByRole('button', { name: 'Toggle state' })
   const stamp = await toggle.getAttribute('data-wb')
@@ -204,8 +277,9 @@ test('clsx elements are refused at resolve time', async ({ page }) => {
   const ws = await connect()
   try {
     const resolved = await request(ws, { t: 'resolve', loc }, 'resolved')
-    expect(resolved.classes).toBeNull()
-    expect(resolved.reason).toBe('computed-classname')
+    // the static 'rounded-md px-4 py-2 text-sm' arg is editable; the ternary bg/text
+    // branch is read-only and never surfaced as editable classes
+    expect(resolved.classes).toEqual(['rounded-md', 'px-4', 'py-2', 'text-sm'])
   } finally {
     ws.close()
   }

@@ -65,7 +65,7 @@ function showLabel(el, r) {
   if (!hoverLabel) {
     hoverLabel = document.createElement('div')
     hoverLabel.style.cssText =
-      'position:fixed;pointer-events:none;z-index:2147483646;background:#2f6fed;color:#fff;font:11px/1.4 ui-monospace,Consolas,monospace;padding:1px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);'
+      'position:fixed;pointer-events:none;z-index:2147483646;background:#0d9488;color:#fff;font:11px/1.4 ui-monospace,Consolas,monospace;padding:1px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);'
     document.documentElement.appendChild(hoverLabel)
   }
   hoverLabel.textContent = `${el.tagName.toLowerCase()} · ${Math.round(r.width)}×${Math.round(r.height)}`
@@ -126,7 +126,7 @@ document.addEventListener('mousemove', (e) => {
   if (!active) return
   if (panel && (e.target === panel || panel.contains(e.target))) return
   const el = e.target.closest?.('[data-wb]')
-  if (!hoverBox) hoverBox = mkBox('#60a5fa66')
+  if (!hoverBox) hoverBox = mkBox('#2dd4bf66')
   if (el && el !== selected?.el) { showLabel(el, place(hoverBox, el)) }
   else { hoverBox.style.display = 'none'; hideLabel() }
 }, true)
@@ -162,7 +162,7 @@ document.addEventListener('click', (e) => {
   const line = Number(parts.pop())
   const loc = { file: parts.join(':'), line, col }
   selected = { el, loc, stamp }
-  if (!selBox) selBox = mkBox('#3b82f6')
+  if (!selBox) selBox = mkBox('#0d9488')
   place(selBox, el)
   if (hoverBox) hoverBox.style.display = 'none'
 

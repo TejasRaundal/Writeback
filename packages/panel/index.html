@@ -5,210 +5,289 @@
 <title>Writeback</title>
 <style>
   :root, :root[data-theme="light"] {
-    --bg: #fbfbfa; --panel: #ffffff; --inset: #f4f4f2; --line: #e9e8e4; --line2: #dddcd7;
-    --fg: #1a1c22; --dim: #6d7078; --faint: #a2a5ac;
-    --accent: #5b5bd6; --accent-soft: #ededfb; --accent-line: #d8d8f5;
-    --amber: #9a6700; --amber-bg: #fdf6e8; --amber-line: #f0dcae;
-    --green: #14855f; --green-bg: #e9f6ee; --red: #c8323b;
-    --chip: #f1f1ef; --chip-line: #e4e3df;
-    --shadow-1: 0 1px 2px rgba(24,26,32,.05);
-    --shadow-2: 0 2px 8px rgba(24,26,32,.10);
+    --bg: #F2F4F3; --panel: #FEFEFE; --inset: #EFF2F1; --well: #F7F9F8;
+    --line: #E3E7E5; --line2: #D3D9D6; --hairline: rgba(255,255,255,.7);
+    --fg: #181D1C; --dim: #5D6764; --faint: #9AA4A0;
+    --acc: #0B7A6E; --acc-2: #0F9485; --acc-soft: #E4F2EF; --acc-line: #B9DDD6; --acc-glow: rgba(11,122,110,.16);
+    --add: #0E8A5F; --add-bg: #E8F5EE; --del: #C23838; --del-bg: #FBECEC;
+    --amber: #96690A; --amber-bg: #FBF3DF; --amber-line: #EBD9A8;
+    --chip: #F0F2F1; --chip-line: #E1E5E3;
+    --gutter: #AEB8B4; --code-dim: #7E8985;
+    --shadow-2: 0 2px 8px rgba(15,20,18,.10);
   }
   :root[data-theme="dark"] {
-    --bg: #131419; --panel: #191b21; --inset: #1f2129; --line: #262932; --line2: #30343f;
-    --fg: #e3e4e8; --dim: #90929b; --faint: #556174;
-    --accent: #797bec; --accent-soft: #232441; --accent-line: #38396b;
-    --amber: #e3b341; --amber-bg: #2a2214; --amber-line: #4d3d1b;
-    --green: #4ccb8f; --green-bg: #15291f; --red: #f2636b;
-    --chip: #22242d; --chip-line: #2d303b;
-    --shadow-1: 0 1px 2px rgba(0,0,0,.3);
+    --bg: #0A0D0E; --panel: #131819; --inset: #191F21; --well: #0F1415;
+    --line: #212A2B; --line2: #2C3739; --hairline: rgba(255,255,255,.035);
+    --fg: #E9EDEB; --dim: #95A19D; --faint: #5B6864;
+    --acc: #4FD6C4; --acc-2: #6FE3D3; --acc-soft: #11302C; --acc-line: #1E4741; --acc-glow: rgba(79,214,196,.14);
+    --add: #4CC893; --add-bg: #12291F; --del: #F27272; --del-bg: #2E1717;
+    --amber: #E3B341; --amber-bg: #292112; --amber-line: #4D3D1B;
+    --chip: #1B2224; --chip-line: #273032;
+    --gutter: #43504D; --code-dim: #6C7A76;
     --shadow-2: 0 2px 8px rgba(0,0,0,.4);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--fg);
-    font: 13px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font: 13px/1.45 system-ui, "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif;
     display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;
   }
-  .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+  .mono { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
   .num { font-variant-numeric: tabular-nums; }
   button, input, select { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 6px; }
+  :focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; border-radius: 6px; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
   header {
-    flex: none; display: flex; align-items: center; gap: 7px; height: 42px;
-    padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+    flex: none; display: flex; align-items: center; gap: 8px; height: 42px;
+    padding: 0 10px 0 14px; background: linear-gradient(var(--panel), var(--well)); border-bottom: 1px solid var(--line);
   }
   .wordmark { display: flex; align-items: center; gap: 7px; margin-right: auto; }
   .wordmark .wbmark { color: var(--fg); flex: none; }
-  .wordmark .mark { font-weight: 700; font-size: 13px; letter-spacing: .13em; }
-  .wordmark .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); transition: background .2s; }
-  .wordmark .dot.off { background: var(--red); }
-  body.disconnected #content, body.disconnected #actionbar, body.disconnected .tools { opacity: .45; pointer-events: none; }
+  .wordmark .mark { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-weight: 650; font-size: 11.5px; letter-spacing: .14em; }
+  .wordmark .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--add); transition: background .2s;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--add) 18%, transparent); animation: beat 2.6s ease-in-out infinite; }
+  .wordmark .dot.off { background: var(--del); box-shadow: 0 0 0 3px color-mix(in srgb, var(--del) 18%, transparent); animation: none; }
+  @keyframes beat { 50% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--add) 10%, transparent); } }
+  body.disconnected #content, body.disconnected #rail, body.disconnected .tools { opacity: .45; pointer-events: none; }
+  .hset { display: flex; align-items: center; background: var(--well); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .iconbtn {
-    height: 28px; min-width: 28px; display: inline-grid; place-items: center; padding: 0 8px;
-    background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: pointer;
-    color: var(--dim); font-size: 14px; line-height: 1; transition: background .12s, border-color .12s, color .12s;
+    height: 26px; min-width: 28px; display: inline-grid; place-items: center; padding: 0 9px;
+    background: transparent; border: none; border-radius: 0; cursor: pointer;
+    color: var(--dim); font-size: 12px; line-height: 1; transition: background .12s, color .12s;
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace;
   }
-  .iconbtn:hover { background: var(--inset); border-color: var(--line); }
-  .iconbtn.on { color: var(--amber); border-color: var(--amber-line); background: var(--amber-bg); }
-  header a.iconbtn { text-decoration: none; font-size: 12px; }
+  .hset .iconbtn + .iconbtn { border-left: 1px solid var(--line); }
+  .iconbtn:hover { background: var(--inset); color: var(--fg); }
+  .iconbtn.on { color: var(--amber); background: var(--amber-bg); }
+  .iconbtn sup { font-size: 8px; margin-left: 2px; }
+  header a.iconbtn { text-decoration: none; font-size: 11px; display: inline-flex; align-items: center; }
 
   #scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
   #scroll::-webkit-scrollbar { width: 10px; }
   #scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 5px; border: 3px solid var(--bg); }
 
-  .hint-empty { padding: 42px 22px; text-align: center; color: var(--faint); font-size: 12.5px; }
-  .hint-empty .glyph { font-size: 24px; margin-bottom: 10px; }
-  .hint-empty p { margin: 0 0 18px; }
-  .keys { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; text-align: left; font-size: 11.5px; color: var(--dim); width: fit-content; margin: 0 auto; }
-  .keys kbd { font-family: inherit; font-size: 11px; color: var(--fg); background: var(--panel);
-    border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; margin-right: 2px; }
+  .hint-empty { padding: 52px 22px 40px; text-align: center; color: var(--faint); position: relative; }
+  .hint-empty .field { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle at 50% 84px, var(--acc-glow), transparent 46%); }
+  .ret { width: 52px; height: 52px; margin: 0 auto 18px; position: relative; }
+  .ret svg { display: block; animation: spin 14s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ret .ctr { position: absolute; inset: 0; display: grid; place-items: center; }
+  .ret .ctr i { width: 5px; height: 5px; border-radius: 50%; background: var(--acc); }
+  .hint-empty p { margin: 0 0 22px; font-size: 13px; color: var(--dim); }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; text-align: left; font-size: 11.5px; color: var(--dim); width: fit-content; margin: 0 auto; position: relative; }
+  .keys kbd { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10px; color: var(--fg); background: var(--inset);
+    box-shadow: inset 0 0 0 1px var(--line2), inset 0 -2px 0 var(--line2); border-radius: 4px; padding: 1.5px 6px; margin-right: 3px; }
 
-  .selcard { border-bottom: 1px solid var(--line); background: var(--panel); }
-  .crumbwrap { padding: 11px 14px 7px; }
-  .components { font-weight: 600; font-size: 13.5px; letter-spacing: -.01em; }
-  .components .sep { color: var(--faint); font-weight: 400; margin: 0 4px; }
-  .components .plus { color: var(--accent); font-weight: 600; margin-left: 6px; font-size: 11.5px; }
-  .srcline a { color: var(--dim); cursor: pointer; font-size: 11.5px; text-decoration: none; }
-  .srcline a:hover { color: var(--accent); }
-  .tokens { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 14px 10px; }
-  .tk { font-family: ui-monospace, Consolas, monospace; font-size: 11px; padding: 2px 7px; border-radius: 5px;
-    background: var(--chip); border: 1px solid var(--chip-line); color: var(--dim); }
-  .tk.mine { color: var(--fg); border-color: var(--accent-line); background: var(--accent-soft); }
-  .tk.arb { color: var(--amber); border-color: var(--amber-line); background: var(--amber-bg); }
-  .tk.draft { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; cursor: pointer; }
-  .tk.draft::after { content: " ✕"; opacity: .55; font-size: 9px; }
-  .tk.draft:hover { background: var(--accent); color: #fff; }
+  .selcard { border-bottom: 1px solid var(--line); background: linear-gradient(color-mix(in srgb, var(--acc-soft) 26%, var(--panel)), var(--panel) 82%); }
+  .crumbwrap { padding: 12px 14px 8px; }
+  .components { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-weight: 650; font-size: 14px; letter-spacing: -.01em; }
+  .components .sep { color: var(--faint); font-weight: 400; font-size: 12px; }
+  .components .up { color: var(--dim); font-weight: 500; }
+  .components .plus { color: var(--acc); font-weight: 600; font-size: 11.5px; }
+  .srcline { margin-top: 6px; }
+  .srcline a { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); cursor: pointer; font-size: 11px; text-decoration: none;
+    background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+  .srcline a:hover { border-color: var(--acc-line); color: var(--fg); }
+  .srcline a .ln { color: var(--acc); }
+  .srcline a .go { color: var(--faint); font-size: 9px; }
+  .tokens { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 12px; }
+  .tk { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10.5px; padding: 2.5px 7px; border-radius: 5px;
+    background: var(--chip); box-shadow: inset 0 0 0 1px var(--chip-line); border: none; color: var(--dim); }
+  .tk.mine { color: var(--fg); box-shadow: inset 0 0 0 1px var(--acc-line); background: var(--acc-soft); }
+  .tk.arb { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber-line); background: var(--amber-bg); }
+  .tk.now { color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); background: var(--acc-soft); font-weight: 650; cursor: pointer; }
+  .pair { display: inline-flex; align-items: center; gap: 5px; padding: 2.5px 7px; border-radius: 5px; cursor: pointer;
+    background: var(--acc-soft); box-shadow: inset 0 0 0 1px var(--acc);
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10.5px; }
+  .pair .old { color: var(--faint); text-decoration: line-through; }
+  .pair .ar { color: var(--acc); font-size: 9px; }
+  .pair .new { color: var(--acc); font-weight: 650; }
   .tokens .none { font-size: 11.5px; color: var(--faint); }
 
-  .banner { margin: 9px 14px 0; padding: 8px 11px; border-radius: 6px; font-size: 12px; line-height: 1.5;
-    background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--fg); }
+  .banner { margin: 10px 14px 0; padding: 8px 11px; border-radius: 8px; font-size: 12px; line-height: 1.5;
+    background: var(--acc-soft); box-shadow: inset 0 0 0 1px var(--acc-line); color: var(--fg); }
   .banner b { font-weight: 600; }
-  .banner.amber { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
-  .banner a { color: var(--accent); cursor: pointer; margin-right: 8px; text-decoration: none; }
+  .banner.amber { background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber-line); color: var(--amber); }
+  .banner a { color: var(--acc); cursor: pointer; margin-right: 8px; text-decoration: none; }
   .banner a:hover { text-decoration: underline; }
 
-  .refused { margin: 12px 14px; padding: 11px 12px; border-radius: 6px; background: var(--amber-bg); border: 1px solid var(--amber-line); }
-  .refused b { color: var(--amber); font-size: 12.5px; font-weight: 600; }
-  .refused .why { color: var(--dim); margin-top: 4px; font-size: 12px; }
-  .hints { margin-top: 9px; border-top: 1px dashed var(--amber-line); padding-top: 9px; }
-  .hints .lead { color: var(--dim); font-size: 12px; margin-bottom: 3px; }
-  .hints a { display: block; color: var(--accent); cursor: pointer; font-size: 11.5px; padding: 2px 0; text-decoration: none; }
-  .hints a:hover { text-decoration: underline; }
+  .refused { margin: 14px 14px; border-radius: 10px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--amber-line); }
+  .refused .rh { display: flex; align-items: center; gap: 9px; padding: 10px 13px;
+    background: var(--amber-bg); color: var(--amber); font-weight: 650; font-size: 12.5px; }
+  .refused .rh .code { margin-left: auto; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 9.5px; font-weight: 500;
+    opacity: .85; background: color-mix(in srgb, var(--amber) 12%, transparent); padding: 1px 7px; border-radius: 99px; }
+  .refused .why { padding: 10px 13px 4px; color: var(--dim); font-size: 12px; line-height: 1.6; }
+  .refused .why b { color: var(--fg); font-weight: 600; }
+  .hints { padding: 7px 13px 12px; }
+  .hints .lead { color: var(--dim); font-size: 11.5px; margin-bottom: 6px; }
+  .hints a { display: flex; gap: 8px; align-items: center; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 11px;
+    color: var(--dim); padding: 5px 9px; margin: 0 -9px; border-radius: 6px; text-decoration: none; cursor: pointer; }
+  .hints a:hover { background: var(--inset); color: var(--fg); }
+  .hints a .cmp { color: var(--fg); font-weight: 600; }
+  .hints a .loc { color: var(--acc); }
 
   section { border-bottom: 1px solid var(--line); }
-  section h2 { display: flex; align-items: center; gap: 7px; margin: 0; padding: 10px 14px 7px; cursor: pointer; user-select: none;
-    font-size: 11px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+  section h2 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 11px 14px 7px; cursor: pointer; user-select: none;
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace;
+    font-size: 9.5px; font-weight: 650; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
   section h2:hover { color: var(--dim); }
-  section h2 .chev { font-size: 8px; transition: transform .15s; }
+  section h2 .chev { font-size: 7px; color: var(--acc); transition: transform .15s; }
+  section h2 .cnt { margin-left: auto; font-size: 9px; color: var(--acc); background: var(--acc-soft); border-radius: 99px; padding: 0 6px; letter-spacing: 0; }
   section.closed .chev { transform: rotate(-90deg); }
-  section .body { padding: 0 14px 10px; }
+  section .body { padding: 2px 14px 13px; display: flex; flex-direction: column; gap: 7px; }
   section.closed .body { display: none; }
-  section.closed h2 { padding-bottom: 10px; }
+  section.closed h2 { padding-bottom: 11px; }
 
-  .row { display: flex; align-items: center; gap: 9px; min-height: 32px; }
-  .row label { width: 68px; flex: none; color: var(--dim); font-size: 12px; }
-  .row.staged label { color: var(--accent); font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 10px; min-height: 30px; position: relative; }
+  .row label { width: 62px; flex: none; color: var(--dim); font-size: 12px; }
+  .row.staged label { color: var(--acc); font-weight: 600; }
+  .row.staged::before { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px; width: 2px; border-radius: 2px; background: var(--acc); }
 
-  .stepper { display: flex; align-items: stretch; height: 28px; margin-left: auto;
-    border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); overflow: hidden; }
-  .stepper button { width: 28px; border: none; background: transparent; color: var(--dim); cursor: pointer;
+  .stepper { display: flex; align-items: stretch; height: 29px; margin-left: auto;
+    border: none; border-radius: 8px; background: var(--well); overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--line2), inset 0 1.5px 3px rgba(0,0,0,.05); }
+  .stepper button { width: 27px; border: none; background: transparent; color: var(--dim); cursor: pointer;
     font-size: 15px; line-height: 1; padding: 0; border-radius: 0; transition: background .1s; }
-  .stepper button:hover { background: var(--inset); color: var(--fg); }
-  .stepper button:active { background: var(--accent-soft); color: var(--accent); }
-  .stepper .val { min-width: 58px; display: grid; place-items: center; font-size: 12.5px;
-    border-left: 1px solid var(--line); border-right: 1px solid var(--line); font-weight: 550; }
+  .stepper button:hover { background: var(--inset); color: var(--acc); }
+  .stepper button:active { background: var(--acc-soft); color: var(--acc); }
+  .stepper .val { min-width: 58px; display: grid; place-items: center; font-size: 12px; padding: 0 8px;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line); font-weight: 550;
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
   .stepper .val.unset { color: var(--faint); font-weight: 400; font-size: 11px; }
-  .stepper .val.staged { color: var(--accent); }
+  .stepper.staged { box-shadow: inset 0 0 0 1.5px var(--acc), 0 0 10px var(--acc-glow); }
+  .stepper .from { color: var(--faint); text-decoration: line-through; margin-right: 7px; font-weight: 400; }
+  .stepper .to { color: var(--acc); font-weight: 650; }
   .dimval { color: var(--faint) !important; font-weight: 400 !important; }
 
   /* per-property revert — appears only on a staged row */
   .revert { flex: none; width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
-    border: 1px solid var(--line2); border-radius: 6px; background: var(--panel); color: var(--dim);
-    cursor: pointer; font-size: 14px; line-height: 1; transition: color .12s, border-color .12s; }
-  .revert:hover { color: var(--accent); border-color: var(--accent); }
+    border: none; box-shadow: inset 0 0 0 1px var(--line2); border-radius: 7px; background: var(--panel); color: var(--dim);
+    cursor: pointer; font-size: 14px; line-height: 1; transition: color .12s, box-shadow .12s; }
+  .revert:hover { color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
 
-  select { margin-left: auto; height: 28px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); font-size: 12px; cursor: pointer; }
-  input[type=range] { flex: 1; accent-color: var(--accent); height: 28px; margin: 0; }
+  select { margin-left: auto; height: 29px; padding: 0 8px; border: none; box-shadow: inset 0 0 0 1px var(--line2);
+    border-radius: 7px; background: var(--well); font-size: 12px; cursor: pointer; }
+  input[type=range] { flex: 1; accent-color: var(--acc); height: 29px; margin: 0; }
   .rangeval { min-width: 32px; text-align: right; color: var(--dim); font-size: 12px; }
 
   .colorhead { display: flex; align-items: center; gap: 7px; min-height: 26px; font-size: 12px; color: var(--dim); }
-  .colorhead .chipdot { width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--line2); flex: none; }
+  .colorhead .chipdot { width: 15px; height: 15px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line2); flex: none; }
   .colorhead .name { font-weight: 550; color: var(--fg); font-size: 11.5px; }
-  .colorhead .name.staged { color: var(--accent); }
-  .pill { margin-left: auto; height: 22px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--line2);
+  .colorhead .name.staged { color: var(--acc); }
+  .pill { margin-left: auto; height: 22px; padding: 0 9px; border-radius: 99px; border: none; box-shadow: inset 0 0 0 1px var(--line2);
     background: transparent; color: var(--dim); font-size: 11px; cursor: pointer; transition: all .12s; }
-  .pill.on { background: var(--green-bg); border-color: var(--green); color: var(--green); }
-  .contrast { font-size: 11.5px; color: var(--dim); margin: 3px 0; }
-  .contrast b.pass { color: var(--green); } .contrast b.fail { color: var(--red); }
-  .swatches { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; margin: 6px 0 4px; max-height: 112px; overflow-y: auto; padding: 2px; }
-  .sw { aspect-ratio: 1; border-radius: 4px; border: 1px solid rgba(127,127,127,.22); cursor: pointer; padding: 0; transition: transform .08s; }
-  .sw:hover { transform: scale(1.25); border-color: var(--fg); position: relative; z-index: 1; }
+  .pill.on { background: var(--add-bg); box-shadow: inset 0 0 0 1px var(--add); color: var(--add); }
+  .contrast { font-size: 11px; color: var(--dim); margin: 3px 0; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
+  .contrast b.pass { color: var(--add); } .contrast b.fail { color: var(--del); }
+  .swatches { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin: 6px 0 4px; max-height: 118px; overflow-y: auto; padding: 3px; }
+  .sw { aspect-ratio: 1; border-radius: 5px; border: none; box-shadow: inset 0 0 0 1px rgba(127,127,127,.28); cursor: pointer; padding: 0; transition: transform .08s; }
+  .sw:hover { transform: scale(1.25); box-shadow: inset 0 0 0 1px var(--fg); position: relative; z-index: 1; }
   .sw:focus-visible { transform: scale(1.25); position: relative; z-index: 1; }
-  .sw.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .sw.sel { outline: 2px solid var(--acc); outline-offset: 2px; }
   .sw.fail { opacity: .14; pointer-events: none; }
   .colorblock + .colorblock { border-top: 1px solid var(--line); margin-top: 9px; padding-top: 8px; }
   .customrow { display: flex; gap: 6px; margin-top: 5px; }
   .custom { flex: 1; height: 28px; padding: 0 9px; border: 1px dashed var(--amber-line); background: transparent;
-    color: var(--amber); border-radius: 6px; font-size: 11.5px; }
+    color: var(--amber); border-radius: 7px; font-size: 11.5px; }
   .custom::placeholder { color: var(--amber); opacity: .55; }
   .custom:focus { border-style: solid; outline: none; }
-  .custom.bad { border-color: var(--red); color: var(--red); }
+  .custom.bad { border-color: var(--del); color: var(--del); }
   .custom-apply { height: 28px; padding: 0 10px; border: 1px solid var(--amber-line); background: transparent;
-    color: var(--amber); border-radius: 6px; font-size: 13px; cursor: pointer; }
+    color: var(--amber); border-radius: 7px; font-size: 13px; cursor: pointer; }
   .custom-apply:hover { background: var(--amber-bg); }
 
-  #actionbar { flex: none; display: none; align-items: center; gap: 9px; padding: 10px 14px;
-    background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -2px 8px rgba(0,0,0,.04); }
-  #actionbar .count { margin-right: auto; color: var(--accent); font-weight: 600; font-size: 12px; }
-  .btn { height: 30px; padding: 0 15px; border-radius: 7px; border: 1px solid var(--line2);
-    background: var(--panel); cursor: pointer; font-size: 12.5px; font-weight: 550; box-shadow: var(--shadow-1);
-    transition: background .12s, border-color .12s; }
-  .btn:hover { background: var(--inset); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.primary:hover { filter: brightness(1.08); }
+  /* ── the write rail ── */
+  #rail { flex: none; display: none; background: var(--panel); position: relative; }
+  #rail::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 1;
+    background: linear-gradient(90deg, var(--acc), color-mix(in srgb, var(--acc) 20%, transparent)); }
+  #rail .railin { border-top: 1px solid var(--line); box-shadow: 0 -8px 24px var(--acc-glow); }
+  .railh { display: flex; align-items: center; gap: 8px; padding: 10px 14px 0; }
+  .railh .t { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 9.5px; font-weight: 650;
+    letter-spacing: .2em; text-transform: uppercase; color: var(--acc); }
+  .railh .caret { width: 6px; height: 11px; background: var(--acc); animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .railh .n { margin-left: auto; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 10px; color: var(--faint); }
+  .diffs { padding: 8px 14px 0; display: flex; flex-direction: column; gap: 4px; max-height: 92px; overflow-y: auto; }
+  .dl { display: flex; gap: 7px; align-items: center; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 11px; }
+  .dl .g { width: 22px; color: var(--gutter); font-size: 9.5px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+  .dl .del { color: var(--del); background: var(--del-bg); padding: 1.5px 7px; border-radius: 5px; }
+  .dl .add { color: var(--add); background: var(--add-bg); padding: 1.5px 7px; border-radius: 5px; }
+  .dl .x { margin-left: auto; color: var(--faint); font-size: 10px; cursor: pointer; opacity: .7; background: none; border: none; padding: 2px 4px; }
+  .dl .x:hover { color: var(--del); opacity: 1; }
+
+  #dryrun { margin: 9px 14px 0; background: var(--well); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+  #dryrun .dh { display: flex; align-items: center; gap: 7px; padding: 5px 10px; border-bottom: 1px solid var(--line);
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 9.5px; color: var(--code-dim); }
+  #dryrun .dh .file { color: var(--fg); }
+  #dryrun .dh .dry { margin-left: auto; color: var(--acc); background: var(--acc-soft); border-radius: 99px; padding: 0 7px; font-size: 9px; letter-spacing: .08em; }
+  #dryrun pre { margin: 0; padding: 7px 0; font-family: "Cascadia Code", ui-monospace, Consolas, monospace;
+    font-size: 10.5px; line-height: 1.7; overflow-x: auto; max-height: 132px; overflow-y: auto; }
+  #dryrun .cl { display: flex; white-space: pre; padding: 0 10px; }
+  #dryrun .cl.d { background: var(--del-bg); color: var(--del); }
+  #dryrun .cl.a { background: var(--add-bg); color: var(--add); }
+  #dryrun .cl.h { color: var(--code-dim); }
+
+  .railbtns { display: flex; gap: 8px; padding: 11px 14px 13px; align-items: center; }
+  .btn { height: 31px; padding: 0 14px; border-radius: 8px; border: none; cursor: pointer;
+    background: var(--inset); box-shadow: inset 0 0 0 1px var(--line2); color: var(--fg); font-size: 12.5px; font-weight: 550; }
+  .btn:hover { background: var(--chip); }
+  .btn.ghost { background: transparent; box-shadow: none; color: var(--dim); }
+  .btn.ghost:hover { color: var(--del); background: transparent; }
+  .btn.write { margin-left: auto; background: linear-gradient(var(--acc-2), var(--acc));
+    color: var(--bg); font-weight: 700; letter-spacing: .01em;
+    box-shadow: 0 1px 0 rgba(255,255,255,.15) inset, 0 2px 10px var(--acc-glow); }
+  .btn.write:hover { filter: brightness(1.06); background: linear-gradient(var(--acc-2), var(--acc)); }
   .btn:disabled { opacity: .4; cursor: default; box-shadow: none; }
 
-  pre.diff { margin: 9px 14px; background: var(--inset); border: 1px solid var(--line); border-radius: 6px;
-    padding: 9px 11px; overflow-x: auto; color: var(--faint); max-height: 130px; font-size: 11px; line-height: 1.55; }
-  pre.diff .add { color: var(--green); } pre.diff .del { color: var(--red); }
-
-  footer { flex: none; border-top: 1px solid var(--line); background: var(--panel); padding: 7px 12px 9px; max-height: 26vh; overflow-y: auto; }
-  .tools { display: flex; gap: 5px; margin-bottom: 7px; }
-  .histhead { font-size: 9.5px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 1px 0 4px; }
-  .journal .e { display: flex; align-items: center; gap: 7px; min-height: 22px; font-size: 10px; color: var(--dim); border-radius: 4px; padding: 0 4px; margin: 0 -4px; }
+  footer { flex: none; border-top: 1px solid var(--line); background: var(--well); padding: 9px 14px 11px; max-height: 26vh; overflow-y: auto; }
+  .tools { display: flex; gap: 5px; margin-bottom: 8px; }
+  .tools .btn { height: 26px; padding: 0 10px; font-size: 11.5px; }
+  .histhead { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 9px; font-weight: 650;
+    letter-spacing: .2em; text-transform: uppercase; color: var(--faint); margin: 1px 0 6px; }
+  .journal .e { display: flex; align-items: center; gap: 9px; min-height: 22px; font-size: 10.5px; color: var(--dim);
+    font-family: "Cascadia Code", ui-monospace, Consolas, monospace; border-radius: 4px; padding: 0 4px; margin: 0 -4px; }
   .journal .e:hover { background: var(--inset); }
+  .journal .e .mk { width: 5px; height: 5px; border-radius: 50%; background: var(--add); flex: none; }
   .journal .e .file { color: var(--fg); font-weight: 550; flex: none; }
   .journal .e .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .journal .e button { flex: none; height: 17px; padding: 0 6px; font-size: 9px; border-radius: 4px;
-    border: 1px solid var(--line2); background: var(--panel); color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .1s; }
+    border: none; box-shadow: inset 0 0 0 1px var(--line2); background: var(--panel); color: var(--dim); cursor: pointer; opacity: 0; transition: opacity .1s; }
   .journal .e:hover button, .journal .e button:focus-visible { opacity: 1; }
-  .journal .e button:hover { color: var(--red); border-color: var(--red); }
+  .journal .e button:hover { color: var(--del); box-shadow: inset 0 0 0 1px var(--del); }
   .journal .none { color: var(--faint); font-size: 10px; }
 
   .toast { position: fixed; left: 12px; right: 12px; bottom: 10px; z-index: 10;
-    background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber);
-    border-radius: 5px; padding: 6px 10px; font-size: 10.5px; box-shadow: var(--shadow-2); animation: rise .18s ease-out; }
-  .toast.ok { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+    background: var(--amber-bg); box-shadow: inset 0 0 0 1px var(--amber-line), var(--shadow-2); color: var(--amber);
+    border-radius: 7px; padding: 6px 10px; font-size: 10.5px; animation: rise .18s ease-out; }
+  .toast.ok { background: var(--add-bg); box-shadow: inset 0 0 0 1px var(--add), var(--shadow-2); color: var(--add); }
   @keyframes rise { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
 </style>
 </head>
 <body>
 <header>
-  <span class="wordmark"><svg class="wbmark" viewBox="0 0 32 32" width="15" height="15" fill="none" aria-hidden="true"><g transform="translate(1 0)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--accent)"/><path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="currentColor"/></g></svg><span class="mark">WRITEBACK</span><span class="dot" id="status" title="Connected"></span></span>
-  <button class="iconbtn" id="driftToggle" title="Drift radar — outline off-scale values" aria-label="Toggle drift radar">◇</button>
-  <a class="iconbtn" href="/export" target="_blank" title="Session changelog" aria-label="Export session changelog">export</a>
-  <button class="iconbtn" id="themeToggle" title="Switch theme" aria-label="Switch to dark theme">🌙</button>
+  <span class="wordmark"><svg class="wbmark" viewBox="0 0 32 32" width="15" height="15" fill="none" aria-hidden="true"><g transform="translate(1 0)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 H19 C24 17 24 9 19 9 H13" stroke="var(--acc)"/><path d="M11.75 12.25 L7 17 L11.75 21.75" stroke="currentColor"/></g></svg><span class="mark">WRITEBACK</span><span class="dot" id="status" title="Connected"></span></span>
+  <span class="hset">
+    <button class="iconbtn" id="driftToggle" title="Drift radar — outline off-scale values" aria-label="Toggle drift radar">◇</button>
+    <a class="iconbtn" href="/export" target="_blank" title="Session changelog" aria-label="Export session changelog">export</a>
+    <button class="iconbtn" id="themeToggle" title="Switch theme" aria-label="Switch to dark theme">☾</button>
+  </span>
 </header>
 
 <div id="scroll">
   <div id="crumb">
     <div class="hint-empty">
-      <div class="glyph">⌖</div>
-      <p>Click any element on the page<br />to inspect and edit it.</p>
+      <div class="field"></div>
+      <div class="ret">
+        <svg viewBox="0 0 52 52" width="52" height="52" fill="none" aria-hidden="true">
+          <circle cx="26" cy="26" r="20" stroke="var(--acc-line)" stroke-width="1.5"/>
+          <path d="M26 2 v9 M26 41 v9 M2 26 h9 M41 26 h9" stroke="var(--acc)" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span class="ctr"><i></i></span>
+      </div>
+      <p>Click any element in the app<br />to inspect and edit its source.</p>
       <div class="keys">
         <span><kbd>↑</kbd><kbd>↓</kbd></span><span>step padding</span>
         <span><kbd>Alt</kbd>+arrows</span><span>step margin</span>
@@ -219,14 +298,22 @@
     </div>
   </div>
   <div id="content"></div>
-  <pre class="diff mono" id="diff" hidden></pre>
 </div>
 
-<div id="actionbar">
-  <span class="count" id="count"></span>
-  <button class="btn" id="reset">Reset</button>
-  <button class="btn primary" id="save">Save</button>
-</div>
+<!-- the write rail: staged edits as diff lines + dry-run review before anything touches disk -->
+<div id="rail"><div class="railin">
+  <div class="railh"><span class="t">Pending write</span><span class="caret" aria-hidden="true"></span><span class="n" id="railn"></span></div>
+  <div class="diffs" id="diffs"></div>
+  <div id="dryrun" hidden>
+    <div class="dh"><span class="file" id="dryfile"></span><span class="dry">DRY-RUN</span></div>
+    <pre id="drypre"></pre>
+  </div>
+  <div class="railbtns">
+    <button class="btn ghost" id="reset">Discard</button>
+    <button class="btn" id="review">Review diff</button>
+    <button class="btn write" id="save">Write</button>
+  </div>
+</div></div>
 
 <footer>
   <div class="tools" id="tools" hidden>
@@ -241,7 +328,7 @@ const EMPTY_STATE = $('crumb').innerHTML
 
 // ── theme ──
 function applyThemeButton(theme) {
-  $('themeToggle').textContent = theme === 'light' ? '🌙' : '☀️'
+  $('themeToggle').textContent = theme === 'light' ? '☾' : '☀'
   $('themeToggle').setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme')
 }
 const savedTheme = localStorage.getItem('wb-theme') || 'light'
@@ -264,8 +351,14 @@ const LEADING = ['none', 'tight', 'snug', 'normal', 'relaxed', 'loose']
 const ROUNDED = ['none', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', '3xl', 'full']
 const SHADOWS = ['none', '2xs', 'xs', 'sm', 'DEFAULT', 'md', 'lg', 'xl', '2xl', 'inner']
 const MANAGED = ['p', 'px', 'py', 'm', 'gap', 'bg', 'text', 'text-size', 'font-weight', 'font-family', 'tracking', 'leading', 'rounded', 'shadow', 'opacity']
+const SECTION_GROUPS = {
+  Spacing: ['p', 'px', 'py', 'm', 'gap'],
+  Typography: ['text-size', 'font-weight', 'font-family', 'tracking', 'leading'],
+  Colors: ['text', 'bg'],
+  Appearance: ['rounded', 'shadow', 'opacity'],
+}
 
-// CSS approximations for live preview (the real value is written as a class on Save)
+// CSS approximations for live preview (the real value is written as a class on Write)
 const SIZE_CSS = { xs: '.75rem', sm: '.875rem', base: '1rem', lg: '1.125rem', xl: '1.25rem', '2xl': '1.5rem', '3xl': '1.875rem', '4xl': '2.25rem', '5xl': '3rem', '6xl': '3.75rem', '7xl': '4.5rem', '8xl': '6rem', '9xl': '8rem' }
 const WEIGHT_CSS = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 }
 const TRACK_CSS = { tighter: '-.05em', tight: '-.025em', normal: '0', wide: '.025em', wider: '.05em', widest: '.1em' }
@@ -331,7 +424,7 @@ window.addEventListener('message', (e) => {
   const d = e.data
   if (d?.t === 'wb-select') {
     if (d.add && sel) { multi.push({ loc: d.loc, hash: null, classes: null }); send({ t: 'resolve', loc: d.loc }) }
-    else { sel = { loc: d.loc, components: d.components || [], computed: d.computed || {} }; multi = []; draft = {}; send({ t: 'resolve', loc: sel.loc }) }
+    else { sel = { loc: d.loc, components: d.components || [], computed: d.computed || {} }; multi = []; draft = {}; invalidateReview(); send({ t: 'resolve', loc: sel.loc }) }
   }
   if (d?.t === 'wb-nudge' && sel?.classes) {
     const cur = valueOf(d.group)
@@ -339,9 +432,10 @@ window.addEventListener('message', (e) => {
     const next = config.spacing[clamp((i < 0 ? config.spacing.indexOf('4') : i) + d.dir, config.spacing)]
     if (next !== undefined) stage(d.group, next)
   }
-  if (d?.t === 'wb-deselect') { sel = null; multi = []; draft = {}; previewClear(); showEmpty() }
+  if (d?.t === 'wb-deselect') { sel = null; multi = []; draft = {}; invalidateReview(); previewClear(); showEmpty() }
   if (d?.t === 'wb-drift-state') {
     $('driftToggle').classList.toggle('on', !!d.on)
+    $('driftToggle').innerHTML = d.on && d.count ? '◇<sup>' + d.count + '</sup>' : '◇'
     $('driftToggle').title = !d.on ? 'Drift radar — outline off-scale values'
       : d.count ? `Drift radar: ${d.count} off-scale value${d.count === 1 ? '' : 's'}`
       : 'Drift radar: no off-scale values found'
@@ -355,11 +449,15 @@ function onMessage(e) {
     const extra = multi.find((x) => sameLoc(x.loc, m.loc))
     if (extra) { extra.hash = m.hash; extra.classes = m.classes; render(); afterResolve(); return }
     if (!sel || !sameLoc(sel.loc, m.loc)) return
-    Object.assign(sel, { hash: m.hash, classes: m.classes, blast: m.blast, hints: m.hints, dirty: m.dirty, instance: m.instance, reason: m.reason })
+    Object.assign(sel, { hash: m.hash, classes: m.classes, blast: m.blast, hints: m.hints, dirty: m.dirty, instance: m.instance, reason: m.reason, locked: m.locked })
     render(); afterResolve()
   }
+  if (m.t === 'edited' && m.dry) {
+    if (m.diff) dryDiffs.push(m.diff)
+    if (--dryPending <= 0) finishReview()
+    return
+  }
   if (m.t === 'edited' && !m.dry) {
-    if (m.diff) collectedDiff.push(m.diff)
     if (m.warn) toast(m.warn)
     send({ t: 'journal' })
     pendingResolves = reresolveLocs.length || 1
@@ -369,6 +467,7 @@ function onMessage(e) {
   if (m.t === 'refused') {
     toast('Edit refused: ' + m.reason.replace(/-/g, ' '))
     editQueue.length = 0; reresolveLocs = []; saving = false
+    dryPending = 0; dryDiffs = []; reviewing = false
     if (sel) { busy = true; pendingResolves = 1; send({ t: 'resolve', loc: sel.loc }) } else busy = false
   }
   if (m.t === 'journal') renderJournal(m.entries)
@@ -384,10 +483,11 @@ function afterResolve() {
 
 // ── staging ──
 // Controls never touch source directly — they stage a value and preview it live.
-// Save writes the whole draft; Reset discards it and restores the original render.
+// Review shows the server dry-run diff; Write commits the whole draft; Discard restores.
 function stage(group, value) {
   if (!sel || sel.classes === null) return
   draft[group] = value
+  invalidateReview()
   applyPreview()
   const st = $('scroll').scrollTop
   render()
@@ -405,39 +505,96 @@ function applyPreview() {
   const s = draftStyle()
   if (Object.keys(s).length) previewStyle(s)
   else previewClear()
-  updateActionBar()
+  updateRail()
 }
 
-function updateActionBar() {
+// token as it will be written for a staged group (mirror of the server's buildToken for display)
+function tokenFor(g, v) {
+  return g === 'text-size' ? 'text-' + v : g === 'font-weight' || g === 'font-family' ? 'font-' + v : v === 'DEFAULT' ? g : `${g}-${v}`
+}
+// source token currently owning a group on the selected element (for the − side of a diff line)
+function sourceTokenIn(classes, group) {
+  if (!classes) return null
+  for (const c of classes) if (matchGroup(c, group) !== null) return c
+  return null
+}
+
+// ── the write rail ──
+let reviewing = false, dryPending = 0, dryDiffs = []
+function invalidateReview() {
+  reviewing = false; dryPending = 0; dryDiffs = []
+  $('dryrun').hidden = true
+  $('drypre').innerHTML = ''
+}
+function updateRail() {
   const n = Object.keys(draft).length
-  $('actionbar').style.display = n ? 'flex' : 'none'
-  $('count').textContent = n ? `${n} unsaved change${n > 1 ? 's' : ''}` : ''
+  $('rail').style.display = n ? 'block' : 'none'
+  if (!n) { invalidateReview(); return }
+  $('railn').textContent = `${n} change${n > 1 ? 's' : ''} · ${multi.length ? (multi.length + 1) + ' elements' : '1 file'}`
+  const box = $('diffs'); box.innerHTML = ''
+  for (const [g, v] of Object.entries(draft)) {
+    const line = el('div', 'dl')
+    line.appendChild(el('span', 'g', String(sel?.loc.line ?? '')))
+    const old = sourceTokenIn(sel?.classes, g)
+    if (old) line.appendChild(el('span', 'del', '− ' + old))
+    line.appendChild(el('span', 'add', '+ ' + tokenFor(g, v)))
+    const x = el('button', 'x', '✕'); x.title = 'Discard this change'; x.onclick = () => unstage(g)
+    line.appendChild(x)
+    box.appendChild(line)
+  }
+  // bulk edits skip the dry-run gate (the protocol's bulk has no dry mode) — Write applies directly
+  $('review').style.display = multi.length ? 'none' : ''
+  $('save').textContent = multi.length ? `Write to ${multi.length + 1} elements` : 'Write to ' + (sel ? sel.loc.file.split('/').pop() : '')
+}
+
+$('review').onclick = () => {
+  if (!sel || !Object.keys(draft).length || busy || dryPending) return
+  dryDiffs = []; dryPending = Object.keys(draft).length
+  for (const [group, value] of Object.entries(draft)) {
+    const op = { kind: 'tw', group, variants: [], value, raw: value.startsWith('[') }
+    send({ t: 'edit', id: crypto.randomUUID(), loc: sel.loc, hash: sel.hash, op, dry: true })
+  }
+}
+function finishReview() {
+  reviewing = true
+  $('dryfile').textContent = sel ? sel.loc.file : ''
+  const pre = $('drypre'); pre.innerHTML = ''
+  for (const diff of dryDiffs) for (const l of diff.split('\n')) {
+    const cls = l[0] === '+' && l[1] !== '+' ? 'a' : l[0] === '-' && l[1] !== '-' ? 'd' : l.startsWith('@@') ? 'h' : ''
+    pre.appendChild(el('span', 'cl ' + cls, l + '\n'))
+  }
+  $('dryrun').hidden = false
 }
 
 function rerender() { const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st }
 // un-stage a single property, keeping the rest of the draft
-function unstage(group) { delete draft[group]; applyPreview(); rerender() }
-$('reset').onclick = () => { draft = {}; previewClear(); rerender(); updateActionBar() }
+function unstage(group) { delete draft[group]; invalidateReview(); applyPreview(); rerender() }
+$('reset').onclick = () => { draft = {}; invalidateReview(); previewClear(); rerender(); updateRail() }
 $('save').onclick = () => {
   if (!Object.keys(draft).length || busy) return
-  collectedDiff = []
   saving = true
   for (const [group, value] of Object.entries(draft)) editQueue.push({ group, value })
   pump()
 }
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && Object.keys(draft).length) {
+    e.preventDefault()
+    if (reviewing || multi.length) $('save').click(); else $('review').click()
+  }
+})
 
 function finishSave() {
   saving = false
   draft = {}
+  invalidateReview()
   previewClear()
-  updateActionBar()
-  if (collectedDiff.length) showDiff(collectedDiff.join('\n'))
-  toast('Saved ' + (sel ? sel.loc.file.split('/').pop() : ''), true)
+  updateRail()
+  toast('Wrote ' + (sel ? sel.loc.file.split('/').pop() : ''), true)
 }
 
 // ── serialized write queue (fixes stale-hash refusals on multi-op saves) ──
 const editQueue = []
-let busy = false, pendingResolves = 0, reresolveLocs = [], saving = false, collectedDiff = []
+let busy = false, pendingResolves = 0, reresolveLocs = [], saving = false
 
 function pump() {
   if (busy || !sel || !editQueue.length) return
@@ -461,7 +618,7 @@ $('copy').onclick = () => {
 $('paste').onclick = () => {
   if (!clipboard) return
   for (const tok of clipboard) for (const g of MANAGED) { const v = matchGroup(tok, g); if (v !== null) { draft[g] = v; break } }
-  applyPreview(); const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st
+  invalidateReview(); applyPreview(); const st = $('scroll').scrollTop; render(); $('scroll').scrollTop = st
 }
 
 function matchGroup(cls, group) {
@@ -514,16 +671,12 @@ function renderJournal(entries) {
   if (!entries.length) { j.innerHTML += '<div class="none">Saved edits appear here, each with undo.</div>'; return }
   for (const en of entries.slice(-8).reverse()) {
     const row = el('div', 'e')
-    row.append(el('span', 'file', en.file.split('/').pop()), el('span', 'what mono', en.summary.replace(/^\+\s*/, '').slice(0, 46)))
+    row.append(el('span', 'mk'), el('span', 'file', en.file.split('/').pop()), el('span', 'what', en.summary.replace(/^\+\s*/, '').slice(0, 46)))
     const b = el('button', null, 'undo'); b.onclick = () => send({ t: 'undo', id: en.id })
     row.appendChild(b); j.appendChild(row)
   }
 }
 
-function showDiff(diff) {
-  const e = $('diff'); e.hidden = false
-  e.innerHTML = diff.split('\n').map((l) => '<span class="' + (l[0] === '+' ? 'add' : l[0] === '-' ? 'del' : '') + '">' + l.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>').join('\n')
-}
 function toast(text, ok) {
   document.querySelector('.toast')?.remove()
   const d = el('div', 'toast' + (ok ? ' ok' : ''), (ok ? '✓ ' : '') + text)
@@ -544,7 +697,7 @@ function stepperOver(group, label, list, opts = {}) {
   const cur = valueOf(group), staged = isStaged(group), mixed = isMixed(group)
   const row = el('div', 'row' + (staged ? ' staged' : ''))
   row.appendChild(el('label', null, label))
-  const box = el('div', 'stepper')
+  const box = el('div', 'stepper' + (staged ? ' staged' : ''))
   const step = (delta) => {
     const i = list.indexOf(valueOf(group))
     const next = list[clamp((i < 0 ? (opts.startAt ?? Math.floor(list.length / 2)) : i) + delta, list)]
@@ -558,9 +711,19 @@ function stepperOver(group, label, list, opts = {}) {
     }
     return b
   }
-  const shown = mixed ? 'mixed' : cur === 'DEFAULT' ? 'base' : (cur ?? computedOf(group) ?? '—')
-  const v = el('span', 'val mono num' + (cur === null && !mixed ? ' unset' : '') + (staged ? ' staged' : ''), shown)
-  if (cur === null && !mixed) v.title = 'Current computed value — no class sets this yet'
+  const v = el('span', 'val num')
+  if (staged) {
+    // staged wells show the pending change inline: old → new
+    const from = sourceValueIn(sel.classes, group)
+    const wrap = el('span')
+    if (from !== null) wrap.appendChild(el('span', 'from', from === 'DEFAULT' ? 'base' : from))
+    wrap.appendChild(el('span', 'to', cur === 'DEFAULT' ? 'base' : cur))
+    v.appendChild(wrap)
+  } else {
+    const shown = mixed ? 'mixed' : cur === 'DEFAULT' ? 'base' : (cur ?? computedOf(group) ?? '—')
+    v.textContent = shown
+    if (cur === null && !mixed) { v.classList.add('unset'); v.title = 'Current computed value — no class sets this yet' }
+  }
   box.append(mk('−', -1), v, mk('+', 1)); row.appendChild(box)
   if (staged) row.appendChild(revertBtn(group))
   return row
@@ -658,6 +821,8 @@ const openSections = JSON.parse(localStorage.getItem('wb-sections') || '{"Spacin
 function makeSection(title, children) {
   const s = el('section'); if (!openSections[title]) s.classList.add('closed')
   const h = el('h2'); h.append(el('span', 'chev', '▾'), el('span', null, title))
+  const stagedCount = (SECTION_GROUPS[title] || []).filter((g) => g in draft).length
+  if (stagedCount) h.appendChild(el('span', 'cnt', stagedCount + ' staged'))
   h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0'); h.setAttribute('aria-expanded', String(!!openSections[title]))
   const toggle = () => { s.classList.toggle('closed'); openSections[title] = !s.classList.contains('closed'); h.setAttribute('aria-expanded', String(openSections[title])); localStorage.setItem('wb-sections', JSON.stringify(openSections)) }
   h.onclick = toggle; h.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
@@ -665,9 +830,16 @@ function makeSection(title, children) {
   return s
 }
 
-function jumpLink(hint) { const a = el('a', 'mono', `${hint.loc.file}:${hint.loc.line}`); a.onclick = () => { sel = { loc: hint.loc, components: [hint.component], computed: {} }; draft = {}; send({ t: 'resolve', loc: hint.loc }) }; return a }
+function jumpLink(hint) {
+  const a = el('a')
+  a.append(el('span', 'cmp', hint.component), el('span', 'loc', `${hint.loc.file}:${hint.loc.line}`))
+  a.onclick = () => { sel = { loc: hint.loc, components: [hint.component], computed: {} }; draft = {}; invalidateReview(); send({ t: 'resolve', loc: hint.loc }) }
+  return a
+}
+// compact inline variant for banners
+function jumpLinkInline(hint) { const a = el('a', 'mono', `${hint.component} · ${hint.loc.file}:${hint.loc.line}`); a.onclick = () => { sel = { loc: hint.loc, components: [hint.component], computed: {} }; draft = {}; invalidateReview(); send({ t: 'resolve', loc: hint.loc }) }; return a }
 
-function showEmpty() { $('crumb').innerHTML = EMPTY_STATE; $('content').innerHTML = ''; $('tools').hidden = true; $('diff').hidden = true; updateActionBar() }
+function showEmpty() { $('crumb').innerHTML = EMPTY_STATE; $('content').innerHTML = ''; $('tools').hidden = true; updateRail() }
 
 function render() {
   const crumb = $('crumb'); crumb.innerHTML = ''
@@ -678,19 +850,38 @@ function render() {
   const cw = el('div', 'crumbwrap')
   const names = el('div', 'components')
   const chain = sel.components.length ? sel.components : ['host element']
-  chain.forEach((n, i) => { if (i) names.appendChild(el('span', 'sep', '‹')); names.append(n) })
+  chain.forEach((n, i) => { if (i) names.appendChild(el('span', 'sep', '‹')); names.appendChild(el('span', i ? 'up' : null, n)) })
   if (multi.length) names.appendChild(el('span', 'plus', `+${multi.length} selected`))
-  const src = el('div', 'srcline mono'); const a = el('a', null, sel.loc.file + ':' + sel.loc.line); a.title = 'Open in editor'; a.onclick = () => send({ t: 'open', loc: sel.loc }); src.appendChild(a)
+  const src = el('div', 'srcline mono')
+  const a = el('a'); a.title = 'Open in editor'
+  const [fpath, fline] = [sel.loc.file, sel.loc.line]
+  a.append(el('span', null, fpath + ':'), el('span', 'ln', String(fline)), el('span', 'go', '↗'))
+  a.onclick = () => send({ t: 'open', loc: sel.loc })
+  src.appendChild(a)
   cw.append(names, src); card.appendChild(cw)
 
   if (sel.classes !== null) {
     const strip = el('div', 'tokens')
-    const shownDraft = new Set(Object.keys(draft))
-    if (!sel.classes.length && !shownDraft.size) strip.appendChild(el('span', 'none', 'no classes yet'))
-    for (const t of sel.classes) { const managed = MANAGED.some((g) => matchGroup(t, g) !== null); const arb = /\[[^\]]*\]/.test(t); strip.appendChild(el('span', 'tk' + (arb ? ' arb' : managed ? ' mine' : ''), t)) }
+    const stagedShown = new Set()
+    if (!sel.classes.length && !Object.keys(draft).length) strip.appendChild(el('span', 'none', 'no classes yet'))
+    for (const t of sel.classes) {
+      // a token whose group is staged renders as a before→after capsule
+      const g = MANAGED.find((gr) => matchGroup(t, gr) !== null && gr in draft)
+      if (g) {
+        stagedShown.add(g)
+        const cap = el('button', 'pair'); cap.title = 'Click to discard this change'
+        cap.append(el('span', 'old', t), el('span', 'ar', '→'), el('span', 'new', tokenFor(g, draft[g])))
+        cap.onclick = () => unstage(g)
+        strip.appendChild(cap)
+        continue
+      }
+      const managed = MANAGED.some((gr) => matchGroup(t, gr) !== null); const arb = /\[[^\]]*\]/.test(t)
+      strip.appendChild(el('span', 'tk' + (arb ? ' arb' : managed ? ' mine' : ''), t))
+    }
     for (const [g, v] of Object.entries(draft)) {
-      const chip = el('span', 'tk draft', g === 'text-size' ? 'text-' + v : g === 'font-weight' || g === 'font-family' ? 'font-' + v : v === 'DEFAULT' ? g : `${g}-${v}`)
-      chip.title = 'Click to reset this change'
+      if (stagedShown.has(g)) continue
+      const chip = el('button', 'tk now', '+ ' + tokenFor(g, v))
+      chip.title = 'Click to discard this change'
       chip.onclick = () => unstage(g)
       strip.appendChild(chip)
     }
@@ -699,18 +890,24 @@ function render() {
   crumb.appendChild(card)
 
   if (sel.dirty) c.appendChild(el('div', 'banner amber', 'This file has uncommitted manual changes — consider committing first.'))
+  if (sel.locked?.length) c.appendChild(el('div', 'banner amber', 'Locked by a runtime condition (edits to these refuse): ' + sel.locked.join(' · ')))
 
   if (sel.classes === null) {
-    const r = el('div', 'refused'); r.appendChild(el('b', null, 'Can’t edit this safely'))
-    r.appendChild(el('div', 'why', sel.reason === 'no-classname' ? 'This element has no className to edit.' : 'Its className is computed at runtime, so Writeback refuses instead of guessing.'))
-    if (sel.hints?.length) { const h = el('div', 'hints'); h.appendChild(el('div', 'lead', 'The classes likely come from a call site — edit there:')); for (const hint of sel.hints) { const link = jumpLink(hint); link.textContent = `${hint.component} · ${link.textContent}`; h.appendChild(link) } r.appendChild(h) }
-    c.appendChild(r); updateActionBar(); return
+    const r = el('div', 'refused')
+    const rh = el('div', 'rh'); rh.append(el('span', null, 'Can’t edit this safely'), el('span', 'code', sel.reason || 'refused'))
+    r.appendChild(rh)
+    const why = el('div', 'why')
+    if (sel.reason === 'no-classname') why.append('This element has no ', el('b', null, 'className'), ' to edit.')
+    else { why.append('Its ', el('b', null, 'className'), ' is computed at runtime, so Writeback ', el('b', null, 'refuses instead of guessing'), ' — a wrong guess would corrupt your source.') }
+    r.appendChild(why)
+    if (sel.hints?.length) { const h = el('div', 'hints'); h.appendChild(el('div', 'lead', 'The classes likely come from a call site — edit there:')); for (const hint of sel.hints) h.appendChild(jumpLink(hint)); r.appendChild(h) }
+    c.appendChild(r); updateRail(); return
   }
 
   if (sel.instance) {
     const b = el('div', 'banner'); b.append('Edits change the ', el('b', null, sel.instance.component), ' component — every instance updates. ')
     if (!sel.instance.forwards) b.append('It doesn’t accept a className prop, so per-instance editing isn’t possible.')
-    else if (sel.hints?.length) { b.append('To change just one, edit its call site: '); sel.hints.forEach((hint) => b.appendChild(jumpLink(hint))) }
+    else if (sel.hints?.length) { b.append('To change just one, edit its call site: '); sel.hints.forEach((hint) => b.appendChild(jumpLinkInline(hint))) }
     c.appendChild(b)
   }
 
@@ -732,7 +929,7 @@ function render() {
     sliderOver('opacity', 'opacity', 100, 5),
   ]))
   if (sel.blast?.length) c.appendChild(el('div', 'banner', 'cva variants here (edits target the active variant slot): ' + sel.blast.join(' · ')))
-  updateActionBar()
+  updateRail()
 }
 
 connect()
