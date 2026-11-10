@@ -4,7 +4,7 @@
   "description": "MCP server for Writeback — lets AI agents (Claude Code, Cursor, Codex) edit UI styling through the constrained Writeback bridge. Protocol-only: works against any bridge that speaks the Writeback wire protocol.",
   "license": "MIT",
   "author": "Tejas Raundal",
-  "homepage": "https://github.com/TejasRaundal/Writeback#readme",
+  "homepage": "https://tejasraundal.github.io/Teclops-AI/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TejasRaundal/Writeback.git",

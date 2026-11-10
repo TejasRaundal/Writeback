@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "description": "Visually inspect React interfaces and make constrained, undoable source edits through Writeback's Tailwind-aware local bridge.",
   "author": {
-    "name": "Tejas Raundal"
+    "name": "Tejas Raundal",
+    "url": "https://tejasraundal.github.io/Teclops-AI/"
   },
+  "homepage": "https://tejasraundal.github.io/Teclops-AI/",
   "repository": "https://github.com/TejasRaundal/Writeback",
   "license": "MIT",
   "keywords": ["react", "tailwindcss", "vite", "source-editing", "mcp"],
@@ -16,6 +18,7 @@
     "shortDescription": "Edit React UI at source",
     "longDescription": "Writeback is a visual development toolkit that connects browser-based React editing with actual source code. Inspect components, resolve their source locations, make constrained styling changes, reuse Tailwind design tokens, preview diffs and safely undo modifications. Designed for frontend developers and AI coding agents.",
     "developerName": "Tejas Raundal",
+    "websiteURL": "https://tejasraundal.github.io/Teclops-AI/",
     "category": "Developer Tools",
     "capabilities": ["Inspect Tailwind design tokens", "Resolve editable React source", "Apply constrained source edits", "Undo Writeback edits"],
     "defaultPrompt": [

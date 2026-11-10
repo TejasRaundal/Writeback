@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "description": "Constrained React and Tailwind source editing through the local Writeback bridge.",
   "author": {
-    "name": "Tejas Raundal"
+    "name": "Tejas Raundal",
+    "url": "https://tejasraundal.github.io/Teclops-AI/"
   },
+  "homepage": "https://tejasraundal.github.io/Teclops-AI/",
   "repository": "https://github.com/TejasRaundal/Writeback",
   "license": "MIT",
   "keywords": ["react", "tailwindcss", "vite", "mcp"]

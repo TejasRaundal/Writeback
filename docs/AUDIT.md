@@ -30,7 +30,7 @@ The edit engine uses Babel parser, MagicString, `ws`, `launch-editor`, Node file
 - Tailwind v3 config filenames supported: `.js`, `.cjs`, and `.mjs`.
 - CSS theme scanning is limited to bounded depth under `src`.
 - MCP does not expose wire-protocol bulk, dry-run, text, token, journal, editor-open, or checkpoint operations.
-- No CI workflow, real screenshot/demo recording, support contact, privacy policy, terms, or hosted product website exists.
+- No CI workflow, real screenshot/demo recording, dedicated support contact, privacy policy, or terms page exists. The product website is <https://tejasraundal.github.io/Teclops-AI/>.
 
 ## Addressed
 

@@ -7,6 +7,8 @@
 
 > Status: local developer tool and desktop-local Agent Plugin. Writeback does not currently provide a hosted HTTPS MCP service.
 
+Website: <https://tejasraundal.github.io/Teclops-AI/>
+
 ## What Writeback does
 
 Writeback connects a rendered React element to the JSX that produced it. The Vite plugin stamps source locations during development, a local bridge resolves those locations, and the editor changes only supported Tailwind conflict groups. Every change is parsed, spliced, reparsed, journaled, and available for undo.
