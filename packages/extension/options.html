@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Writeback options</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 22px 24px; width: 320px;
+    font: 13px/1.5 system-ui, "Segoe UI", sans-serif;
+    background: #F2F4F3; color: #181D1C; }
+  @media (prefers-color-scheme: dark) { body { background: #0A0D0E; color: #E9EDEB; } }
+  h1 { margin: 0 0 4px; font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+  p { margin: 0 0 16px; font-size: 12px; color: #5D6764; }
+  @media (prefers-color-scheme: dark) { p { color: #95A19D; } }
+  label { display: block; font-size: 11px; font-weight: 650; letter-spacing: .16em;
+    text-transform: uppercase; color: #9AA4A0; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  input { flex: 1; height: 30px; padding: 0 10px; border: none; border-radius: 8px;
+    background: #F7F9F8; box-shadow: inset 0 0 0 1px #D3D9D6; font: inherit;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace; color: inherit; }
+  @media (prefers-color-scheme: dark) { input { background: #0F1415; box-shadow: inset 0 0 0 1px #2C3739; } }
+  input:focus { outline: none; box-shadow: inset 0 0 0 1.5px #0B7A6E; }
+  button { height: 30px; padding: 0 14px; border: none; border-radius: 8px; cursor: pointer;
+    background: #0B7A6E; color: #fff; font: inherit; font-weight: 650; }
+  button:hover { filter: brightness(1.08); }
+  .ok { margin-top: 10px; font-size: 11.5px; color: #0E8A5F; height: 16px; }
+</style>
+</head>
+<body>
+  <h1>Writeback</h1>
+  <p>The port your dev server's Writeback bridge listens on. Change this only if you set
+     <code>WRITEBACK_PORT</code> in your project.</p>
+  <label for="port">Bridge port</label>
+  <div class="row">
+    <input id="port" type="number" min="1" max="65535" step="1" />
+    <button id="save">Save</button>
+  </div>
+  <div class="ok" id="ok"></div>
+<script src="options.js"></script>
+</body>
+</html>

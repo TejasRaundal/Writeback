@@ -2,6 +2,27 @@
   "name": "@writeback/mcp",
   "version": "0.1.0",
   "description": "MCP server for Writeback — lets AI agents (Claude Code, Cursor, Codex) edit UI styling through the constrained Writeback bridge. Protocol-only: works against any bridge that speaks the Writeback wire protocol.",
+  "license": "MIT",
+  "author": "Tejas Raundal",
+  "homepage": "https://github.com/TejasRaundal/Writeback#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TejasRaundal/Writeback.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/TejasRaundal/Writeback/issues"
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "tailwindcss",
+    "devtools",
+    "react",
+    "mcp",
+    "ai-agents",
+    "visual-editor"
+  ],
   "type": "module",
   "bin": {
     "writeback-mcp": "./dist/mcp.js"
@@ -10,13 +31,16 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "pnpm build && vitest run"
   },
   "dependencies": {
     "@writeback/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0",
+    "ws": "^8.18.0"
   }
 }

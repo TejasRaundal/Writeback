@@ -5,7 +5,10 @@
     "dev": "pnpm --filter playground dev",
     "test": "pnpm -r --if-present test",
     "build": "pnpm --filter @writeback/protocol build && pnpm --filter @writeback/vite-plugin build && pnpm --filter @writeback/mcp build",
-    "pack:extension": "node -e \"const{execSync}=require('child_process');require('fs').mkdirSync('dist',{recursive:true});execSync('powershell -Command Compress-Archive -Path packages/extension/manifest.json,packages/extension/background.js,packages/extension/picker.js,packages/extension/fiber.js,packages/extension/icons -DestinationPath dist/wb-extension.zip -Force')\"",
-    "release": "pnpm build && pnpm pack:extension && pnpm test"
+    "test:plugin": "node --test scripts/test/*.test.mjs",
+    "validate:plugin": "node scripts/validate-plugin.mjs",
+    "pack:plugins": "node scripts/build-plugin-archives.mjs",
+    "pack:extension": "node -e \"const{execSync}=require('child_process');require('fs').mkdirSync('dist',{recursive:true});execSync('powershell -Command Compress-Archive -Path packages/extension/manifest.json,packages/extension/background.js,packages/extension/picker.js,packages/extension/fiber.js,packages/extension/options.html,packages/extension/options.js,packages/extension/icons -DestinationPath dist/wb-extension.zip -Force')\"",
+    "release": "pnpm build && pnpm pack:plugins && pnpm pack:extension && pnpm test"
   }
 }

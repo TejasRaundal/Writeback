@@ -546,7 +546,9 @@ const groupOf = (key) => key.slice(key.lastIndexOf(':') + 1)
 const chainOf = (key) => { const i = key.lastIndexOf(':'); return i < 0 ? [] : key.slice(0, i).split(':') }
 
 function connect() {
-  ws = new WebSocket('ws://127.0.0.1:7331')
+  // the panel is served BY the bridge, so its own origin is the authority — never hardcode
+  // the port, or a WRITEBACK_PORT override serves a panel that talks to the wrong server
+  ws = new WebSocket('ws://' + location.host)
   ws.onopen = () => {
     document.body.classList.remove('disconnected')
     $('status').classList.remove('off'); $('status').title = 'Connected'

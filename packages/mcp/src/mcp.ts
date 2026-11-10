@@ -6,12 +6,18 @@
 import { createInterface } from 'node:readline'
 
 const WS_URL = `ws://127.0.0.1:${process.env.WRITEBACK_PORT ?? 7331}`
+const GROUPS = new Set(['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'm', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'gap', 'gap-x', 'gap-y', 'bg', 'text', 'text-size', 'font-weight', 'font-family', 'tracking', 'leading', 'rounded', 'shadow', 'opacity'])
+const READ_ONLY = { readOnlyHint: true, openWorldHint: false, destructiveHint: false }
+const WRITES_SOURCE = { readOnlyHint: false, openWorldHint: false, destructiveHint: true }
+const OBJECT_OUTPUT = { type: 'object', additionalProperties: true }
 
 const TOOLS = [
   {
     name: 'get_scale',
     description: "The project's resolved design scale (spacing tokens + color palette) and its `root` path. Call ONCE and cache — the palette is large. All file paths in resolve/edit are relative to `root` (e.g. 'src/App.tsx') or absolute.",
     inputSchema: { type: 'object', properties: {} },
+    outputSchema: OBJECT_OUTPUT,
+    annotations: READ_ONLY,
   },
   {
     name: 'resolve',
@@ -21,10 +27,12 @@ const TOOLS = [
       properties: { file: { type: 'string' }, line: { type: 'number' }, col: { type: 'number' } },
       required: ['file', 'line', 'col'],
     },
+    outputSchema: OBJECT_OUTPUT,
+    annotations: READ_ONLY,
   },
   {
     name: 'edit',
-    description: 'Apply one constrained Tailwind edit. group: p|px|py|pt|pr|pb|pl|m*|gap*|bg|text|text-size|font-weight|font-family|tracking|leading|rounded|shadow|opacity. value: a token from get_scale (or [arbitrary] with raw=true). hash comes from the latest resolve of this file; after each edit the file changes, so resolve again before the next edit to the same file. Set target="callsite" with the loc of a <Component …> usage to style that ONE instance instead of the shared component (only for components that forward className; otherwise refused with reason "not-forwarded"). Returns a unified diff, or {t:refused, reason: hash-mismatch|file-not-found|parse-error|not-forwarded|locked-group}. The hash is opaque: for a cva imported from another module it locks BOTH the definition file (which is written; resolve names it in editFile) and the call site, so echo the hash from resolve/edited rather than hashing a file yourself. locked-group means the element is editable but that group is owned by a conditional branch (resolve lists them in `locked`). variants: an optional state/breakpoint chain (e.g. ["hover"] or ["md"]) — writes the prefixed token (hover:bg-red-500) and replaces only within that same chain; base and variant values of one group are independent.',
+    description: 'Apply one constrained Tailwind edit. group: p|px|py|pt|pr|pb|pl|m*|gap*|bg|text|text-size|font-weight|font-family|tracking|leading|rounded|shadow|opacity. value: a token from get_scale (or [arbitrary] with raw=true). Use the opaque hash from resolve; for another edit to the same file, reuse the post-edit hash returned by edited. Set target="callsite" with the loc of a <Component …> usage to style that ONE instance instead of the shared component (only for components that forward className; otherwise refused with reason "not-forwarded"). Returns a unified diff, or {t:refused, reason: hash-mismatch|file-not-found|parse-error|not-forwarded|locked-group}. For a cva imported from another module the hash locks both the definition file and call site; never compute it yourself. locked-group means the element is editable but that group is owned by a conditional branch (resolve lists them in locked). variants is an optional state/breakpoint chain; base and variant values of one group are independent.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -35,13 +43,61 @@ const TOOLS = [
       },
       required: ['file', 'line', 'col', 'hash', 'group', 'value'],
     },
+    outputSchema: OBJECT_OUTPUT,
+    annotations: WRITES_SOURCE,
   },
   {
     name: 'undo',
     description: 'Undo a previous edit by its id (reverts the file if unchanged since).',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    outputSchema: OBJECT_OUTPUT,
+    annotations: WRITES_SOURCE,
   },
 ]
+
+class RpcError extends Error {
+  constructor(readonly code: number, message: string) { super(message) }
+}
+
+const objectArgs = (name: string, value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RpcError(-32602, `Invalid arguments for ${name}: expected an object`)
+  return value as Record<string, unknown>
+}
+const stringArg = (tool: string, args: Record<string, unknown>, key: string) => {
+  const value = args[key]
+  if (typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new RpcError(-32602, `Invalid arguments for ${tool}: ${key} must be a non-empty string`)
+  return value
+}
+const locArgs = (tool: string, value: unknown) => {
+  const args = objectArgs(tool, value)
+  const file = stringArg(tool, args, 'file')
+  if (!/^(?:[A-Za-z]:[\\/]|[/])/.test(file) && file.split(/[\\/]+/).includes('..')) throw new RpcError(-32602, `Invalid arguments for ${tool}: relative file paths cannot contain ..`)
+  if (!Number.isInteger(args.line) || Number(args.line) < 1) throw new RpcError(-32602, `Invalid arguments for ${tool}: line must be an integer >= 1`)
+  if (!Number.isInteger(args.col) || Number(args.col) < 0) throw new RpcError(-32602, `Invalid arguments for ${tool}: col must be an integer >= 0`)
+  return args
+}
+
+function validateToolArgs(name: string, value: unknown): Record<string, unknown> {
+  if (name === 'get_scale') return objectArgs(name, value)
+  if (name === 'undo') {
+    const args = objectArgs(name, value)
+    stringArg(name, args, 'id')
+    return args
+  }
+  if (name === 'resolve') return locArgs(name, value)
+  if (name === 'edit') {
+    const args = locArgs(name, value)
+    stringArg(name, args, 'hash')
+    const group = stringArg(name, args, 'group')
+    if (!GROUPS.has(group)) throw new RpcError(-32602, `Invalid arguments for ${name}: unsupported group ${group}`)
+    stringArg(name, args, 'value')
+    if (args.variants !== undefined && (!Array.isArray(args.variants) || args.variants.some((v) => typeof v !== 'string'))) throw new RpcError(-32602, `Invalid arguments for ${name}: variants must be an array of strings`)
+    if (args.raw !== undefined && typeof args.raw !== 'boolean') throw new RpcError(-32602, `Invalid arguments for ${name}: raw must be boolean`)
+    if (args.target !== undefined && args.target !== 'callsite') throw new RpcError(-32602, `Invalid arguments for ${name}: target must be callsite`)
+    return args
+  }
+  throw new RpcError(-32602, `Unknown tool: ${name}`)
+}
 
 let ws: WebSocket | null = null
 function bridge(): Promise<WebSocket> {
@@ -119,7 +175,7 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   try {
     req = JSON.parse(line)
   } catch {
-    return
+    return out({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } })
   }
   const reply = (result: object) => out({ jsonrpc: '2.0', id: req.id, result })
   try {
@@ -135,8 +191,10 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
         reply({ tools: TOOLS })
         break
       case 'tools/call': {
-        const result = await callTool(req.params.name, req.params.arguments ?? {})
-        reply({ content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+        const name = typeof req.params?.name === 'string' ? req.params.name : ''
+        const args = validateToolArgs(name, req.params?.arguments ?? {})
+        const result = await callTool(name, args)
+        reply({ content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result, isError: result?.t === 'refused' })
         break
       }
       case 'ping':
@@ -146,6 +204,6 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
         if (req.id !== undefined) out({ jsonrpc: '2.0', id: req.id, error: { code: -32601, message: 'method not found' } })
     }
   } catch (err: any) {
-    if (req.id !== undefined) out({ jsonrpc: '2.0', id: req.id, error: { code: -32000, message: String(err?.message ?? err) } })
+    if (req.id !== undefined) out({ jsonrpc: '2.0', id: req.id, error: { code: err instanceof RpcError ? err.code : -32000, message: String(err?.message ?? err) } })
   }
 })

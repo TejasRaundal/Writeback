@@ -1,5 +1,9 @@
 node_modules/
-dist/
+**/dist/
+!/dist/
+/dist/*
+!/dist/writeback-chatgpt-plugin.zip
+!/dist/writeback-local-mcp-plugin.zip
 .writeback/
 
 # runtime / generated (not source)

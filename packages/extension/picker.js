@@ -1,4 +1,6 @@
-const BRIDGE = 'http://127.0.0.1:7331'
+// Resolved from the extension's options before the picker can activate (see bridgeUp).
+// ponytail: read once per activation, not watched — change the port, then re-toggle.
+let BRIDGE = 'http://127.0.0.1:7331'
 let active = false
 let panel = null
 let hoverBox = null
@@ -9,6 +11,12 @@ let previewSaved = null // { el, props: {name: originalValue} }
 
 // Dormant unless the bridge answers /health
 async function bridgeUp() {
+  try {
+    const { port } = await chrome.storage.sync.get({ port: 7331 })
+    BRIDGE = 'http://127.0.0.1:' + port
+  } catch {
+    // storage unavailable — keep the default port
+  }
   try {
     const r = await fetch(BRIDGE + '/health')
     return (await r.json()).writeback === true

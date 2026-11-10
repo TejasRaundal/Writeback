@@ -2,8 +2,31 @@
   "name": "@writeback/vite-plugin",
   "version": "0.1.0",
   "description": "Writeback — click elements in your running dev app, edit Tailwind visually or via AI agents, write back to real source. Vite plugin + bridge + MCP server.",
+  "license": "MIT",
+  "author": "Tejas Raundal",
+  "homepage": "https://github.com/TejasRaundal/Writeback#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TejasRaundal/Writeback.git",
+    "directory": "packages/vite-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/TejasRaundal/Writeback/issues"
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "tailwindcss",
+    "devtools",
+    "react",
+    "mcp",
+    "ai-agents",
+    "visual-editor"
+  ],
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "publishConfig": {
     "exports": {
       ".": {
@@ -12,7 +35,10 @@
       }
     }
   },
-  "files": ["dist", "panel"],
+  "files": [
+    "dist",
+    "panel"
+  ],
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('panel',{recursive:true});fs.copyFileSync('../panel/index.html','panel/index.html')\"",
     "test": "vitest run"

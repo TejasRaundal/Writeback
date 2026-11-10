@@ -1,0 +1,30 @@
+{
+  "name": "writeback",
+  "version": "0.1.0",
+  "description": "Visually inspect React interfaces and make constrained, undoable source edits through Writeback's Tailwind-aware local bridge.",
+  "author": {
+    "name": "Tejas Raundal"
+  },
+  "repository": "https://github.com/TejasRaundal/Writeback",
+  "license": "MIT",
+  "keywords": ["react", "tailwindcss", "vite", "source-editing", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "Writeback",
+    "shortDescription": "Edit React UI at source",
+    "longDescription": "Writeback is a visual development toolkit that connects browser-based React editing with actual source code. Inspect components, resolve their source locations, make constrained styling changes, reuse Tailwind design tokens, preview diffs and safely undo modifications. Designed for frontend developers and AI coding agents.",
+    "developerName": "Tejas Raundal",
+    "category": "Developer Tools",
+    "capabilities": ["Inspect Tailwind design tokens", "Resolve editable React source", "Apply constrained source edits", "Undo Writeback edits"],
+    "defaultPrompt": [
+      "Inspect my project's Tailwind design scale.",
+      "Resolve this React component and show its editable styles.",
+      "Change this component's padding using existing design tokens and preview the source diff."
+    ],
+    "brandColor": "#5B5BD6",
+    "composerIcon": "./packages/extension/icons/icon128.png",
+    "logo": "./packages/extension/icons/icon128.png"
+  }
+}

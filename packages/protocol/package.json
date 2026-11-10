@@ -2,8 +2,31 @@
   "name": "@writeback/protocol",
   "version": "0.1.0",
   "description": "Wire protocol types for Writeback — the visual code editor bridge",
+  "license": "MIT",
+  "author": "Tejas Raundal",
+  "homepage": "https://github.com/TejasRaundal/Writeback#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TejasRaundal/Writeback.git",
+    "directory": "packages/protocol"
+  },
+  "bugs": {
+    "url": "https://github.com/TejasRaundal/Writeback/issues"
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "tailwindcss",
+    "devtools",
+    "react",
+    "mcp",
+    "ai-agents",
+    "visual-editor"
+  ],
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "publishConfig": {
     "exports": {
       ".": {
@@ -12,7 +35,10 @@
       }
     }
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc"
   },
